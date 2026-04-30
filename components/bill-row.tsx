@@ -13,21 +13,27 @@
 //     and only renders current-period futures (yet to come this build).
 //
 // Tap targets:
-//   - Tap row when status is 'paid' → payment details sheet at
+//   - Tap the row when status is 'paid' → payment details sheet at
 //     `/bills/<id>/payment-details?period=<YYYY-MM>` (decision 24 — split
 //     paid vs unpaid intents to avoid accidental double-payment).
-//   - Tap row when status is anything else → mark-as-paid sheet at
+//   - Tap the row when status is anything else → mark-as-paid sheet at
 //     `/bills/<id>/mark-paid`.
-//   - Long-press row → edit screen at `/bills/<id>`. Long-press is the chosen
-//     edit affordance because the row is a tight target and an "Edit" button
-//     would crowd the amount column. The Bills tab also exposes the edit path
-//     through the floating + (for create); for now long-press keeps the
-//     surface clean.
+//   - Swipe right-to-left → reveals action buttons. The buttons are status
+//     aware: paid bills expose "View" (payment details) plus "Edit"; unpaid
+//     bills expose just "Edit". Tapping a revealed action navigates AND
+//     closes the swipe so the row settles back into place.
+//   - Long-press the row → goes straight to edit. Power-user shortcut kept
+//     alongside the swipe affordance for redundancy.
 //
-// Business logic stays in /logic. This component only branches on the kind of
-// the BillStatus discriminated union and on the wallet color.
+// Implementation: the row body is wrapped in a Swipeable from
+// `react-native-gesture-handler`. The action buttons are rendered via
+// `renderRightActions`. We hold a ref to the swipeable so action handlers
+// can call `close()` before navigating — otherwise the row stays open and
+// the user comes back from the destination screen to a half-open row.
 
+import { useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 
 import { formatCurrency } from '@/logic/currency';
@@ -58,6 +64,7 @@ export function BillRow({
 }: BillRowProps) {
   const router = useRouter();
   const theme = useTheme();
+  const swipeableRef = useRef<Swipeable | null>(null);
 
   const isPaid = status.kind === 'paid';
   const isOverdue = status.kind === 'overdue';
@@ -90,89 +97,218 @@ export function BillRow({
     subLabel = 'Unpaid';
   }
 
-  return (
-    <Pressable
-      onPress={() => {
-        if (isPaid) {
-          router.push({
-            pathname: '/bills/[id]/payment-details',
-            params: { id: bill.id, period },
-          });
-        } else {
-          router.push({
-            pathname: '/bills/[id]/mark-paid',
-            params: { id: bill.id },
-          });
-        }
-      }}
-      onLongPress={() =>
-        router.push({ pathname: '/bills/[id]', params: { id: bill.id } })
-      }
-      delayLongPress={350}
-      accessibilityRole="button"
-      accessibilityLabel={
-        isPaid
-          ? `${bill.name}, ${formatCurrency(amount)}, paid. Tap to view payment details, long press to edit the bill.`
-          : `${bill.name}, ${formatCurrency(amount)}. Tap to mark as paid, long press to edit the bill.`
-      }
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: pressed ? theme.colors.surfaceMuted : theme.colors.surface,
-          borderColor: theme.colors.border,
-          opacity: isPaid ? theme.opacity.paid : 1,
-          borderLeftWidth: accent ? 3 : 0,
-          borderLeftColor: accent ?? 'transparent',
-          paddingLeft: accent ? theme.spacing.md : theme.spacing.lg,
-          paddingRight: theme.spacing.lg,
-          paddingVertical: theme.spacing.md,
-        },
-      ]}
-    >
-      <View style={styles.left}>
-        <Text
-          style={[
-            theme.typography.body.md,
+  function handleMainTap() {
+    if (isPaid) {
+      router.push({
+        pathname: '/bills/[id]/payment-details',
+        params: { id: bill.id, period },
+      });
+    } else {
+      router.push({
+        pathname: '/bills/[id]/mark-paid',
+        params: { id: bill.id },
+      });
+    }
+  }
+
+  function navigateAndClose(action: () => void) {
+    swipeableRef.current?.close();
+    action();
+  }
+
+  function handleEdit() {
+    navigateAndClose(() =>
+      router.push({ pathname: '/bills/[id]', params: { id: bill.id } }),
+    );
+  }
+
+  function handleViewPaymentDetails() {
+    navigateAndClose(() =>
+      router.push({
+        pathname: '/bills/[id]/payment-details',
+        params: { id: bill.id, period },
+      }),
+    );
+  }
+
+  function renderRightActions() {
+    return (
+      <View style={styles.actionsRow}>
+        {isPaid ? (
+          <Pressable
+            onPress={handleViewPaymentDetails}
+            accessibilityRole="button"
+            accessibilityLabel={`View payment details for ${bill.name}`}
+            style={({ pressed }) => [
+              styles.actionButton,
+              {
+                backgroundColor: pressed
+                  ? theme.colors.surfaceMuted
+                  : theme.colors.surface,
+                borderLeftColor: theme.colors.border,
+                borderLeftWidth: theme.borderWidth.hairline,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                theme.typography.body.sm,
+                {
+                  color: theme.colors.text,
+                  fontWeight: theme.typography.weights.medium,
+                },
+              ]}
+            >
+              View
+            </Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={handleEdit}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${bill.name}`}
+          style={({ pressed }) => [
+            styles.actionButton,
             {
-              color: nameColor,
-              textDecorationLine: isPaid ? 'line-through' : 'none',
+              backgroundColor: pressed
+                ? theme.colors.text
+                : theme.colors.accent,
             },
           ]}
-          numberOfLines={1}
         >
-          {bill.name}
-        </Text>
-        {subLabel ? (
           <Text
-            style={[theme.typography.label.md, { color: subColor, marginTop: 2 }]}
-            numberOfLines={1}
+            style={[
+              theme.typography.body.sm,
+              {
+                color: theme.colors.bg,
+                fontWeight: theme.typography.weights.medium,
+              },
+            ]}
           >
-            {subLabel}
+            Edit
           </Text>
-        ) : null}
+        </Pressable>
       </View>
-      <Text
-        style={[
-          theme.typography.body.md,
+    );
+  }
+
+  return (
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      // friction defaults to 1 (natural swipe). The actions container is
+      // ~76px wide per button, so rightThreshold ~half of that feels right.
+      rightThreshold={40}
+      // The container paints the row's background so the swipe reveals
+      // colored action buttons cleanly.
+      containerStyle={{
+        backgroundColor: theme.colors.surface,
+      }}
+    >
+      <Pressable
+        onPress={handleMainTap}
+        onLongPress={handleEdit}
+        delayLongPress={350}
+        accessibilityRole="button"
+        accessibilityLabel={
+          isPaid
+            ? `${bill.name}, ${formatCurrency(amount)}, paid. Tap to view payment details, swipe left for more actions.`
+            : `${bill.name}, ${formatCurrency(amount)}. Tap to mark as paid, swipe left for more actions.`
+        }
+        style={({ pressed }) => [
+          styles.row,
           {
-            color: amountColor,
-            textDecorationLine: isPaid ? 'line-through' : 'none',
-            fontWeight: theme.typography.weights.medium,
+            // The row background must stay fully opaque — applying `opacity`
+            // to the whole row (instead of just the content) makes the
+            // action buttons revealed by Swipeable bleed through during and
+            // after the swipe. The dimming-for-paid effect lives on an
+            // inner wrapper View instead.
+            backgroundColor: pressed
+              ? theme.colors.surfaceMuted
+              : theme.colors.surface,
+            borderColor: theme.colors.border,
+            borderLeftWidth: accent ? 3 : 0,
+            borderLeftColor: accent ?? 'transparent',
+            paddingLeft: accent ? theme.spacing.md : theme.spacing.lg,
           },
         ]}
       >
-        {formatCurrency(amount)}
-      </Text>
-    </Pressable>
+        <View
+          style={[
+            styles.contentWrapper,
+            {
+              // Dim the *content* (text + sub-label + amount) for paid bills
+              // — keeps the visual recede effect from the spreadsheet
+              // metaphor without compromising the row background.
+              opacity: isPaid ? theme.opacity.paid : 1,
+            },
+          ]}
+        >
+          <View style={styles.left}>
+            <Text
+              style={[
+                theme.typography.body.md,
+                {
+                  color: nameColor,
+                  textDecorationLine: isPaid ? 'line-through' : 'none',
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {bill.name}
+            </Text>
+            {subLabel ? (
+              <Text
+                style={[
+                  theme.typography.label.md,
+                  { color: subColor, marginTop: 2 },
+                ]}
+                numberOfLines={1}
+              >
+                {subLabel}
+              </Text>
+            ) : null}
+          </View>
+          <Text
+            style={[
+              theme.typography.body.md,
+              {
+                color: amountColor,
+                textDecorationLine: isPaid ? 'line-through' : 'none',
+                fontWeight: theme.typography.weights.medium,
+              },
+            ]}
+          >
+            {formatCurrency(amount)}
+          </Text>
+        </View>
+      </Pressable>
+    </Swipeable>
   );
 }
 
+const ACTION_BUTTON_WIDTH = 76;
+
 const styles = StyleSheet.create({
   row: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingRight: 16,
+    paddingVertical: 14,
+  },
+  contentWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   left: { flex: 1, marginRight: 12 },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  actionButton: {
+    width: ACTION_BUTTON_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
+

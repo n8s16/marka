@@ -93,12 +93,21 @@ export default function BillsScreen() {
             </Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <BillsSummaryCard
-              monthLabel={currentMonthLabel}
-              paid={paidTotal}
-              expected={expectedTotal}
-            />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            // Sticky the summary card so the paid/expected totals stay
+            // visible while the bills list scrolls underneath. The wrapper
+            // View paints the page background so the card's horizontal
+            // gutters stay opaque when content scrolls beneath them.
+            stickyHeaderIndices={[0]}
+          >
+            <View style={styles.stickyHeader}>
+              <BillsSummaryCard
+                monthLabel={currentMonthLabel}
+                paid={paidTotal}
+                expected={expectedTotal}
+              />
+            </View>
 
             {reminderEntry && reminderEntry.status.kind === 'upcoming' ? (
               <BillsReminderCallout
@@ -164,6 +173,11 @@ function makeStyles(theme: Theme) {
       paddingBottom: theme.spacing.md,
     },
     scrollContent: { paddingBottom: theme.spacing.xxxl },
+    stickyHeader: {
+      backgroundColor: theme.colors.bg,
+      paddingTop: theme.spacing.xs,
+      paddingBottom: theme.spacing.xs,
+    },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     list: {
       marginHorizontal: theme.spacing.lg,
