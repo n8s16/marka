@@ -302,6 +302,41 @@ The pragmatic middle ground: off by default, available to enable. The verify-bio
 
 ---
 
+## 24. Tapping a paid bill opens a payment-details sheet, not mark-as-paid
+
+**Question:** What should tapping a row whose current period is already paid do?
+
+**Decision:** Open a separate "Payment details" sheet showing the existing payment with a single "Undo this payment" action. The mark-as-paid sheet only opens when tapping an *unpaid* row. Recording a payment for a different period of the same bill is reachable via the FAB or (later) the year grid. Editing a paid payment in place is intentionally not in v1 — the user undoes and re-marks with corrected values.
+
+**Why:** During milestone testing, the user discovered that tapping a paid bill opened the mark-as-paid sheet, where the smart-default period jumped to the next *unpaid* period. Saving — even after changing the period dropdown — created a NEW BillPayment for that other period, leaving the original paid record intact. From the user's perspective this looked like "edit", but it was actually "additional payment." Two payments on what felt like a single edit is the worst kind of UX failure: silent data corruption.
+
+The data model intentionally allows multiple payments per bill — one per period — because real bills repeat. But the tap-on-row gesture has a strong "edit" connotation. Splitting the two intents into two sheets resolves the mismatch without changing the data layer. The Undo path uses `hardDeleteBillPayment`, which the data layer already exposes; no schema change is needed.
+
+**Considered and rejected:**
+- *Status quo + clearer copy on the mark-paid sheet* — a small notice explaining "another payment will be recorded." Cheaper but doesn't fix the mental-model mismatch; a user in a hurry won't read the notice.
+- *Read-only receipt with no Undo* — too restrictive. A typo'd amount or wrong wallet becomes uncorrectable, more limiting than the spreadsheet the app replaces.
+- *Receipt + Edit + Undo* — the most flexible variant; rejected for v1 because Undo+remark covers every realistic correction scenario at the cost of one extra tap, and edit-in-place can land later (step 10 polish or beyond) without any data-layer change.
+- *Disabling tap on paid rows entirely* — the row would have no affordance, which is unintuitive. The receipt sheet earns its keep just by surfacing the paid amount, wallet, date, and note even before any action is taken.
+
+---
+
+## 25. Bill form combines Due Day + First Due Month into a single "First due date"
+
+**Question:** Should the Add / edit bill form expose `due_day` and `start_period` as two fields, or merge them into a single date picker?
+
+**Decision:** Single date picker — "First due date" — that decomposes into the two underlying columns on save. The data model stays unchanged: `due_day` and `start_period` remain separate columns per DECISIONS §22 and §23, because the year-month anchor and the day-of-month each play distinct roles in cadence resolution. Only the form UI is merged.
+
+**Why:** During testing, the user noticed that filling out two adjacent fields ("Due day" and "First due month") felt redundant — and worse, the First Due Month picker exposed a day field whose value was silently dropped, leaving the user unsure which "day" actually applied to the bill. Both observations point at the same root cause: from the user's mental model, a bill is "first due on a date," singular.
+
+Decomposing the picked date back into `(due_day, start_period)` is mechanical: the day-of-month becomes `due_day`, the year-month becomes `start_period`. Helper text on the form notes that to set an end-of-month bill (`due_day = 31` with last-day-of-month clamping), the user picks a 31-day month for the first due date.
+
+**Considered and rejected:**
+- *Two fields, sharper helper text* — explained why the day in First Due Month doesn't matter. Doesn't address the bigger redundancy and still leaves users confused on first encounter.
+- *Three-piece combined widget* — separate spinners for year, month, and day inside one field. Uglier than the current native date picker, no real win.
+- *Edit-mode preservation of `due_day = 31`* — when loading a bill where the original `due_day` clamped down (e.g. `due_day = 31`, `start_period = 2026-02` displays as Feb 28), preserve `due_day = 31` if the user doesn't touch the day. Considered, deemed too implicit. The simpler rule — "the picked day is the due day" — is easier to reason about and the edge case (someone wants `due_day = 31` while starting in a non-31-day month) is rare. Future-Claude can reintroduce preservation if real use surfaces a need.
+
+---
+
 ## How to use this document
 
 When making future decisions:

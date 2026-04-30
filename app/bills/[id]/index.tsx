@@ -5,9 +5,9 @@
 // they share the same form.
 //
 // PRD §"Supporting screens" — Add/edit bill: name, expected amount, frequency
-// (monthly/quarterly/yearly/custom — custom takes interval_months), due_day,
-// first due-month (start_period), default wallet, reminder offset, reminder
-// time, auto_forecast.
+// (monthly/quarterly/yearly/custom — custom takes interval_months), first
+// due date (combines start_period + due_day; see DECISIONS §25), default
+// wallet, reminder offset, reminder time, auto_forecast.
 //
 // The Delete affordance maps to `archiveBill` (soft delete) per DATA_MODEL.md
 // "Archived entities preserve history". Hard delete cascades to BillPayments
@@ -33,7 +33,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns } from 'date-fns';
 
 import { CurrencyInput } from '@/components/currency-input';
-import { DateInput, PeriodInput, TimeInput } from '@/components/date-input';
+import { DateInput, TimeInput } from '@/components/date-input';
 import { SegmentedChips } from '@/components/segmented-chips';
 import { TextField } from '@/components/text-field';
 import { WalletPicker } from '@/components/wallet-picker';
@@ -85,6 +85,41 @@ interface FieldErrors {
 
 function todayPeriodString(today: Date): string {
   return formatDateFns(today, 'yyyy-MM');
+}
+
+// Compose the combined "First due date" string (YYYY-MM-DD) from the form's
+// separate `dueDay` + `startPeriod` fields. The data model stores them as two
+// columns (per docs/DATA_MODEL.md and DECISIONS §22, §23); the form merges
+// them into a single picker for clarity (decision §25). Day clamps to the
+// last day of the start month so the date is always valid.
+function composeFirstDueDate(startPeriod: string, dueDay: string): string {
+  if (!/^\d{4}-\d{2}$/.test(startPeriod)) return '';
+  const day = Number(dueDay);
+  if (!Number.isInteger(day) || day < 1 || day > 31) return '';
+  const [yStr, mStr] = startPeriod.split('-');
+  const year = Number(yStr);
+  const month = Number(mStr);
+  // `new Date(year, month, 0)` returns the last day of `month` because month
+  // is 0-indexed in Date constructor — passing month=2 with day=0 yields
+  // "Feb 28/29".
+  const lastDay = new Date(year, month, 0).getDate();
+  const safeDay = Math.min(day, lastDay);
+  return `${startPeriod}-${String(safeDay).padStart(2, '0')}`;
+}
+
+// Inverse of composeFirstDueDate. Given a picked YYYY-MM-DD, decompose into
+// the form's two fields. The picked day becomes due_day verbatim — if a user
+// wants `due_day = 31` (end-of-month-with-clamping) they must pick a date in
+// a 31-day month. This is documented in the form's helper text.
+function decomposeFirstDueDate(picked: string): {
+  startPeriod: string;
+  dueDay: string;
+} | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(picked)) return null;
+  return {
+    startPeriod: picked.slice(0, 7),
+    dueDay: String(Number(picked.slice(8, 10))),
+  };
 }
 
 function emptyForm(today: Date): FormState {
@@ -416,24 +451,41 @@ export default function BillEditScreen() {
           ) : null}
 
           <View style={styles.field}>
-            <TextField
-              label="Due day"
-              value={form.dueDay}
-              onChangeText={(v) => set('dueDay', v.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              helper="Bills due on the 31st use the last day of shorter months (Feb 28/29, Apr 30)."
-              error={errors.dueDay ?? null}
+            <DateInput
+              label="First due date"
+              value={composeFirstDueDate(form.startPeriod, form.dueDay)}
+              onChange={(picked) => {
+                const parts = decomposeFirstDueDate(picked);
+                if (!parts) return;
+                setForm((f) => ({
+                  ...f,
+                  startPeriod: parts.startPeriod,
+                  dueDay: parts.dueDay,
+                }));
+                if (errors.startPeriod || errors.dueDay) {
+                  setErrors((e) => ({
+                    ...e,
+                    startPeriod: undefined,
+                    dueDay: undefined,
+                  }));
+                }
+              }}
+              displayFormat="MMM d, yyyy"
+              error={errors.startPeriod ?? errors.dueDay ?? null}
             />
-          </View>
-
-          <View style={styles.field}>
-            <PeriodInput
-              label="First due month"
-              value={form.startPeriod}
-              onChange={(v) => set('startPeriod', v)}
-              helper="First month this bill is due. Anchors quarterly, yearly, and custom cadences."
-              error={errors.startPeriod ?? null}
-            />
+            <Text
+              style={[
+                theme.typography.label.sm,
+                {
+                  color: theme.colors.textMuted,
+                  marginTop: theme.spacing.xs,
+                },
+              ]}
+            >
+              The bill repeats from this date based on the frequency. To set
+              an end-of-month bill (e.g. always the 31st, clamped in shorter
+              months), pick a 31-day month for the first due date.
+            </Text>
           </View>
 
           <View style={styles.field}>

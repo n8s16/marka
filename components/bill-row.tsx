@@ -13,12 +13,16 @@
 //     and only renders current-period futures (yet to come this build).
 //
 // Tap targets:
-//   - Tap row → mark-as-paid sheet at `/bills/<id>/mark-paid`.
+//   - Tap row when status is 'paid' → payment details sheet at
+//     `/bills/<id>/payment-details?period=<YYYY-MM>` (decision 24 — split
+//     paid vs unpaid intents to avoid accidental double-payment).
+//   - Tap row when status is anything else → mark-as-paid sheet at
+//     `/bills/<id>/mark-paid`.
 //   - Long-press row → edit screen at `/bills/<id>`. Long-press is the chosen
 //     edit affordance because the row is a tight target and an "Edit" button
 //     would crowd the amount column. The Bills tab also exposes the edit path
-//     through the floating + (for create) and through the row's tap-then-edit
-//     in the bill detail (future); for now long-press keeps the surface clean.
+//     through the floating + (for create); for now long-press keeps the
+//     surface clean.
 //
 // Business logic stays in /logic. This component only branches on the kind of
 // the BillStatus discriminated union and on the wallet color.
@@ -35,6 +39,9 @@ import { accentColorFor } from '@/utils/wallet-color';
 
 export interface BillRowProps {
   bill: Bill;
+  // The current period this row represents, e.g. "2026-05". Passed through
+  // to the payment-details sheet so it knows which payment to load.
+  period: string;
   status: BillStatus;
   // Resolved amount in centavos: payment.amount when paid, forecast otherwise.
   amount: number;
@@ -42,7 +49,13 @@ export interface BillRowProps {
   paidWallet?: Wallet;
 }
 
-export function BillRow({ bill, status, amount, paidWallet }: BillRowProps) {
+export function BillRow({
+  bill,
+  period,
+  status,
+  amount,
+  paidWallet,
+}: BillRowProps) {
   const router = useRouter();
   const theme = useTheme();
 
@@ -79,11 +92,29 @@ export function BillRow({ bill, status, amount, paidWallet }: BillRowProps) {
 
   return (
     <Pressable
-      onPress={() => router.push(`/bills/${bill.id}/mark-paid`)}
-      onLongPress={() => router.push(`/bills/${bill.id}`)}
+      onPress={() => {
+        if (isPaid) {
+          router.push({
+            pathname: '/bills/[id]/payment-details',
+            params: { id: bill.id, period },
+          });
+        } else {
+          router.push({
+            pathname: '/bills/[id]/mark-paid',
+            params: { id: bill.id },
+          });
+        }
+      }}
+      onLongPress={() =>
+        router.push({ pathname: '/bills/[id]', params: { id: bill.id } })
+      }
       delayLongPress={350}
       accessibilityRole="button"
-      accessibilityLabel={`${bill.name}, ${formatCurrency(amount)}. Tap to mark as paid, long press to edit.`}
+      accessibilityLabel={
+        isPaid
+          ? `${bill.name}, ${formatCurrency(amount)}, paid. Tap to view payment details, long press to edit the bill.`
+          : `${bill.name}, ${formatCurrency(amount)}. Tap to mark as paid, long press to edit the bill.`
+      }
       style={({ pressed }) => [
         styles.row,
         {

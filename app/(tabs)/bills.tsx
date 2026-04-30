@@ -117,6 +117,7 @@ export default function BillsScreen() {
                   <BillRow
                     key={e.bill.id}
                     bill={e.bill}
+                    period={e.period}
                     status={e.status}
                     amount={e.amount}
                     paidWallet={e.paidWallet}

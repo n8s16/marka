@@ -1,8 +1,11 @@
 // Layout for bill detail routes (`/bills/<id>`).
 //
-// Two routes live under here:
+// Three routes live under here:
 //   - `index.tsx` — the Add/Edit bill form. Default presentation (push).
-//   - `mark-paid.tsx` — the Mark-as-paid sheet. Modal presentation.
+//   - `mark-paid.tsx` — the Mark-as-paid sheet, opened by tapping an
+//     unpaid bill row. Modal presentation.
+//   - `payment-details.tsx` — the Payment details sheet, opened by
+//     tapping a *paid* bill row (decision 24). Modal presentation.
 //
 // Modal presentation must be declared at the layout level (here), not on
 // the screen itself. Declaring it inside the screen file works in some
@@ -19,6 +22,10 @@ export default function BillIdLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="mark-paid" options={{ presentation: 'modal' }} />
+      <Stack.Screen
+        name="payment-details"
+        options={{ presentation: 'modal' }}
+      />
     </Stack>
   );
 }

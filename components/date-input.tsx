@@ -1,19 +1,31 @@
-// Tap-to-edit date input.
+// Tap-to-edit date / period / time inputs.
 //
 // Uses @react-native-community/datetimepicker (pinned 8.4.4 — Expo SDK 54
-// compatible). The picker is presented per-platform:
-//   - iOS: spinner inside an inline modal-ish dropdown when toggled.
-//   - Android: native dialog opened on demand.
+// compatible). The picker behaves very differently per platform; we honor
+// each platform's idioms:
 //
-// We render a labeled tappable surface that displays the current value as
-// a friendly formatted string (e.g. "Apr 29, 2026"). The picker only mounts
-// when expanded, so first-paint cost is just a Pressable.
+//   - Android: rendering the picker auto-presents a native dialog. We render
+//     it inline (mount-on-open) and let Android handle the modal chrome.
+//   - iOS: the picker renders *inline* in the host view (no auto-modal). To
+//     avoid the "tap and nothing appears" UX (the spinner can render below
+//     the visible region or overlap other fields), we wrap it in our own
+//     <Modal> with a Done button. Tapping the field opens the modal,
+//     spinning commits each change, Done dismisses.
 //
-// All wire-protocol values are ISO `YYYY-MM-DD` strings — that's what the
-// data layer stores. date-fns parses/formats both directions.
+// All wire-protocol values are stable strings: YYYY-MM-DD for dates,
+// YYYY-MM for periods, HH:mm 24h for times. date-fns parses/formats both
+// directions.
 
 import { useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -21,6 +33,52 @@ import { format as formatDateFns, parseISO } from 'date-fns';
 
 import { useTheme } from '@/state/theme';
 import type { Theme } from '@/styles/theme';
+
+// ─── Shared modal wrapper (iOS) ──────────────────────────────────────────────
+
+interface IosPickerModalProps {
+  visible: boolean;
+  onDone: () => void;
+  children: React.ReactNode;
+}
+
+function IosPickerModal({ visible, onDone, children }: IosPickerModalProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onDone}
+    >
+      <Pressable style={styles.backdrop} onPress={onDone}>
+        <Pressable
+          // Inner Pressable swallows backdrop taps so spinning doesn't dismiss.
+          onPress={(e) => e.stopPropagation()}
+          style={[styles.sheet, { backgroundColor: theme.colors.surface }]}
+        >
+          {children}
+          <Pressable onPress={onDone} hitSlop={8} style={styles.doneRow}>
+            <Text
+              style={[
+                theme.typography.body.md,
+                {
+                  color: theme.colors.accent,
+                  fontWeight: theme.typography.weights.medium,
+                },
+              ]}
+            >
+              Done
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── Date input (YYYY-MM-DD) ─────────────────────────────────────────────────
 
 export interface DateInputProps {
   /** ISO `YYYY-MM-DD`. */
@@ -53,18 +111,23 @@ export function DateInput({
   })();
 
   function handleChange(event: DateTimePickerEvent, selected?: Date) {
-    // Android closes the dialog on its own; iOS inline mode stays open.
-    if (Platform.OS === 'android') setOpen(false);
-    if (event.type === 'dismissed') return;
+    // Android closes the dialog on its own; iOS stays open so the user can
+    // keep spinning until they hit Done.
+    if (Platform.OS === 'android') {
+      setOpen(false);
+      if (event.type === 'dismissed') return;
+    }
     if (!selected) return;
     onChange(formatDateFns(selected, 'yyyy-MM-dd'));
   }
 
   return (
     <View>
-      {label ? <Text style={[theme.typography.label.md, styles.label]}>{label}</Text> : null}
+      {label ? (
+        <Text style={[theme.typography.label.md, styles.label]}>{label}</Text>
+      ) : null}
       <Pressable
-        onPress={() => !disabled && setOpen((o) => !o)}
+        onPress={() => !disabled && setOpen(true)}
         disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={label ? `${label}: ${display}` : display}
@@ -76,18 +139,46 @@ export function DateInput({
           },
         ]}
       >
-        <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>{display}</Text>
+        <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>
+          {display}
+        </Text>
       </Pressable>
-      {open ? (
+
+      {open && Platform.OS === 'android' ? (
         <DateTimePicker
           value={date}
           mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display="default"
           onChange={handleChange}
         />
       ) : null}
+
+      {Platform.OS === 'ios' ? (
+        <IosPickerModal visible={open} onDone={() => setOpen(false)}>
+          <DateTimePicker
+            value={date}
+            mode="date"
+            display="spinner"
+            // Force light appearance so the wheel text stays dark against our
+            // light-mode modal sheet. Without this, an iOS device in system
+            // dark mode renders the spinner with white-on-white text — fully
+            // interactive but invisible. When dark mode lands (build step 8)
+            // this becomes dynamic via the theme.
+            themeVariant="light"
+            textColor={theme.colors.text}
+            onChange={handleChange}
+          />
+        </IosPickerModal>
+      ) : null}
+
       {error ? (
-        <Text style={[theme.typography.label.sm, styles.errorText, { color: theme.colors.danger }]}>
+        <Text
+          style={[
+            theme.typography.label.sm,
+            styles.errorText,
+            { color: theme.colors.danger },
+          ]}
+        >
           {error}
         </Text>
       ) : null}
@@ -96,6 +187,25 @@ export function DateInput({
 }
 
 // ─── Period input (YYYY-MM) ──────────────────────────────────────────────────
+//
+// Used for `start_period` ("First due month") on the bill form. Unlike date
+// and time, the data model carries no day component for periods — they're
+// strictly `YYYY-MM`. Using `<DateTimePicker>` here would show a day field
+// that the user thinks matters but we silently drop in `onChange`. That
+// surfaced as a real source of confusion during testing: users entered Due
+// Day separately, then saw a day field again here and wondered which one
+// won.
+//
+// Solution: a custom modal with a scrollable list of months. No day field
+// exposed at all. Cross-platform (no native picker quirks). The list spans
+// 24 months back and 24 months forward from today; that's enough for both
+// "I'm setting up a bill that started a year ago" backfilling and "this
+// bill starts in a few months" planning. The currently selected month, if
+// outside that window, is appended so it remains visible.
+
+const PERIOD_WINDOW_MONTHS_BACK = 24;
+const PERIOD_WINDOW_MONTHS_FORWARD = 24;
+const PERIOD_ITEM_HEIGHT = 48;
 
 export interface PeriodInputProps {
   /** YYYY-MM. */
@@ -119,28 +229,47 @@ export function PeriodInput({
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [open, setOpen] = useState(false);
 
-  const date = parseSafePeriod(value) ?? new Date();
   const display = (() => {
     const parsed = parseSafePeriod(value);
     if (!parsed) return value || '—';
     return formatDateFns(parsed, 'MMMM yyyy');
   })();
 
-  function handleChange(event: DateTimePickerEvent, selected?: Date) {
-    if (Platform.OS === 'android') setOpen(false);
-    if (event.type === 'dismissed') return;
-    if (!selected) return;
-    // Force day=1 then format YYYY-MM. The datetimepicker exposes a date,
-    // not a year-month; we drop the day portion.
-    const period = formatDateFns(selected, 'yyyy-MM');
-    onChange(period);
-  }
+  // Build a window of YYYY-MM strings around today. Pinned to mount so the
+  // list doesn't shift while the user scrolls.
+  const months = useMemo(() => {
+    const today = new Date();
+    const result: string[] = [];
+    for (
+      let i = -PERIOD_WINDOW_MONTHS_BACK;
+      i <= PERIOD_WINDOW_MONTHS_FORWARD;
+      i++
+    ) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      result.push(formatDateFns(d, 'yyyy-MM'));
+    }
+    // Make sure the currently selected value is reachable, even if it's
+    // outside the window (e.g. a backfilled bill from 5 years ago).
+    if (value && /^\d{4}-\d{2}$/.test(value) && !result.includes(value)) {
+      result.push(value);
+      result.sort((a, b) => a.localeCompare(b));
+    }
+    return result;
+  }, [value]);
+
+  // Index of the selected value, used to scroll the list into view on open.
+  const initialIndex = useMemo(() => {
+    const i = months.indexOf(value);
+    return i >= 0 ? i : 0;
+  }, [months, value]);
 
   return (
     <View>
-      {label ? <Text style={[theme.typography.label.md, styles.label]}>{label}</Text> : null}
+      {label ? (
+        <Text style={[theme.typography.label.md, styles.label]}>{label}</Text>
+      ) : null}
       <Pressable
-        onPress={() => !disabled && setOpen((o) => !o)}
+        onPress={() => !disabled && setOpen(true)}
         disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={label ? `${label}: ${display}` : display}
@@ -152,25 +281,122 @@ export function PeriodInput({
           },
         ]}
       >
-        <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>{display}</Text>
+        <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>
+          {display}
+        </Text>
       </Pressable>
-      {open ? (
-        <DateTimePicker
-          value={date}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={handleChange}
-        />
-      ) : null}
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+          <Pressable
+            // Inner Pressable swallows backdrop taps so list scrolling
+            // doesn't dismiss.
+            onPress={(e) => e.stopPropagation()}
+            style={[styles.sheet, { backgroundColor: theme.colors.surface }]}
+          >
+            <Text
+              style={[
+                theme.typography.title.sm,
+                {
+                  color: theme.colors.text,
+                  marginBottom: theme.spacing.md,
+                },
+              ]}
+            >
+              {label ?? 'Select month'}
+            </Text>
+            <FlatList
+              data={months}
+              keyExtractor={(p) => p}
+              keyboardShouldPersistTaps="handled"
+              initialScrollIndex={initialIndex}
+              getItemLayout={(_, index) => ({
+                length: PERIOD_ITEM_HEIGHT,
+                offset: PERIOD_ITEM_HEIGHT * index,
+                index,
+              })}
+              renderItem={({ item }) => {
+                const isSelected = item === value;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      onChange(item);
+                      setOpen(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    style={({ pressed }) => [
+                      styles.monthItem,
+                      {
+                        backgroundColor: pressed
+                          ? theme.colors.surfaceMuted
+                          : isSelected
+                            ? theme.colors.surfaceMuted
+                            : 'transparent',
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        theme.typography.body.md,
+                        {
+                          color: theme.colors.text,
+                          fontWeight: isSelected
+                            ? theme.typography.weights.medium
+                            : theme.typography.weights.regular,
+                        },
+                      ]}
+                    >
+                      {formatDateFns(parseISO(`${item}-01`), 'MMMM yyyy')}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+            <Pressable
+              onPress={() => setOpen(false)}
+              hitSlop={8}
+              style={styles.cancelRow}
+              accessibilityRole="button"
+            >
+              <Text
+                style={[
+                  theme.typography.body.sm,
+                  { color: theme.colors.accent },
+                ]}
+              >
+                Cancel
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {helper ? (
         <Text
-          style={[theme.typography.label.sm, styles.helperText, { color: theme.colors.textMuted }]}
+          style={[
+            theme.typography.label.sm,
+            styles.helperText,
+            { color: theme.colors.textMuted },
+          ]}
         >
           {helper}
         </Text>
       ) : null}
       {error ? (
-        <Text style={[theme.typography.label.sm, styles.errorText, { color: theme.colors.danger }]}>
+        <Text
+          style={[
+            theme.typography.label.sm,
+            styles.errorText,
+            { color: theme.colors.danger },
+          ]}
+        >
           {error}
         </Text>
       ) : null}
@@ -189,7 +415,13 @@ export interface TimeInputProps {
   disabled?: boolean;
 }
 
-export function TimeInput({ value, onChange, label, error, disabled }: TimeInputProps) {
+export function TimeInput({
+  value,
+  onChange,
+  label,
+  error,
+  disabled,
+}: TimeInputProps) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [open, setOpen] = useState(false);
@@ -203,17 +435,21 @@ export function TimeInput({ value, onChange, label, error, disabled }: TimeInput
   })();
 
   function handleChange(event: DateTimePickerEvent, selected?: Date) {
-    if (Platform.OS === 'android') setOpen(false);
-    if (event.type === 'dismissed') return;
+    if (Platform.OS === 'android') {
+      setOpen(false);
+      if (event.type === 'dismissed') return;
+    }
     if (!selected) return;
     onChange(formatDateFns(selected, 'HH:mm'));
   }
 
   return (
     <View>
-      {label ? <Text style={[theme.typography.label.md, styles.label]}>{label}</Text> : null}
+      {label ? (
+        <Text style={[theme.typography.label.md, styles.label]}>{label}</Text>
+      ) : null}
       <Pressable
-        onPress={() => !disabled && setOpen((o) => !o)}
+        onPress={() => !disabled && setOpen(true)}
         disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={label ? `${label}: ${display}` : display}
@@ -225,19 +461,44 @@ export function TimeInput({ value, onChange, label, error, disabled }: TimeInput
           },
         ]}
       >
-        <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>{display}</Text>
+        <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>
+          {display}
+        </Text>
       </Pressable>
-      {open ? (
+
+      {open && Platform.OS === 'android' ? (
         <DateTimePicker
           value={date}
           mode="time"
           is24Hour
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display="default"
           onChange={handleChange}
         />
       ) : null}
+
+      {Platform.OS === 'ios' ? (
+        <IosPickerModal visible={open} onDone={() => setOpen(false)}>
+          <DateTimePicker
+            value={date}
+            mode="time"
+            is24Hour
+            display="spinner"
+            // See DateInput for why we force light theme on the iOS spinner.
+            themeVariant="light"
+            textColor={theme.colors.text}
+            onChange={handleChange}
+          />
+        </IosPickerModal>
+      ) : null}
+
       {error ? (
-        <Text style={[theme.typography.label.sm, styles.errorText, { color: theme.colors.danger }]}>
+        <Text
+          style={[
+            theme.typography.label.sm,
+            styles.errorText,
+            { color: theme.colors.danger },
+          ]}
+        >
           {error}
         </Text>
       ) : null}
@@ -285,6 +546,32 @@ function makeStyles(theme: Theme) {
     },
     helperText: {
       marginTop: theme.spacing.xs,
+    },
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      borderTopLeftRadius: theme.radii.lg,
+      borderTopRightRadius: theme.radii.lg,
+      paddingHorizontal: theme.spacing.lg,
+      paddingBottom: theme.spacing.lg,
+      paddingTop: theme.spacing.md,
+    },
+    doneRow: {
+      paddingTop: theme.spacing.md,
+      alignSelf: 'flex-end',
+    },
+    monthItem: {
+      height: 48,
+      justifyContent: 'center',
+      paddingHorizontal: theme.spacing.md,
+      borderBottomWidth: theme.borderWidth.hairline,
+    },
+    cancelRow: {
+      paddingTop: theme.spacing.md,
+      alignItems: 'center',
     },
   });
 }
