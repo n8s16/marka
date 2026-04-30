@@ -1,50 +1,38 @@
-# Welcome to your Expo app 👋
+# Marka
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Personal expense and bill tracker for a single user. Local-only for v1, no backend.
 
-## Get started
+See `docs/PRD.md` for the product spec, `docs/DATA_MODEL.md` for the data
+model, and `CLAUDE.md` for engineering conventions.
 
-1. Install dependencies
+## Requirements
 
-   ```bash
-   npm install
-   ```
+- Node 20+ (tested with Node 24)
+- npm 10+
+- Expo Go on the iOS or Android device you want to develop against
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Getting started
 
 ```bash
-npm run reset-project
+npm install
+npm run dev
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Then scan the QR code from Expo Go.
 
-## Learn more
+## Scripts
 
-To learn more about developing your project with Expo, look at the following resources:
+- `npm run dev` — start Metro and the Expo dev server
+- `npm run dev:ios` — start and open the iOS simulator (macOS only)
+- `npm run dev:android` — start and open an Android emulator
+- `npm test` — run the Jest test suite once
+- `npm run test:watch` — run Jest in watch mode
+- `npm run lint` — ESLint via the Expo config
+- `npm run typecheck` — TypeScript with `--noEmit`
+- `npm run migrate` — generate a Drizzle migration from `db/schema.ts`
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Project layout
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+See `CLAUDE.md` "Project structure" for the full directory map. Most empty
+dirs at scaffold time hold a `.gitkeep` until their owning subagent fills
+them in.

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "marka",
+    "name": "Marka",
     "slug": "marka",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -38,11 +38,11 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     }
   }
 }

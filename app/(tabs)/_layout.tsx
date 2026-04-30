@@ -1,35 +1,38 @@
+// Bottom tab navigator for Marka's four main tabs.
+//
+// Per docs/PRD.md §"Main tabs": Bills, Spending, Wallets, Insights — sticky
+// bottom navigation. Labels are sentence case. We deliberately use plain text
+// labels (no icons) for v1: PRD locks scope tightly and `expo-symbols`/
+// `@expo/vector-icons` are not in the dep list. The user can add icons later
+// without restructuring this file.
+
 import { Tabs } from 'expo-router';
-import React from 'react';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/state/theme';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function TabsLayout() {
+  const theme = useTheme();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
+        tabBarActiveTintColor: theme.colors.text,
+        tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.border,
+        },
+        tabBarLabelStyle: {
+          fontSize: theme.typography.label.md.fontSize,
+          fontWeight: theme.typography.weights.medium,
+        },
+      }}
+    >
+      <Tabs.Screen name="bills" options={{ title: 'Bills' }} />
+      <Tabs.Screen name="spending" options={{ title: 'Spending' }} />
+      <Tabs.Screen name="wallets" options={{ title: 'Wallets' }} />
+      <Tabs.Screen name="insights" options={{ title: 'Insights' }} />
     </Tabs>
   );
 }
