@@ -13,21 +13,27 @@
 //     and only renders current-period futures (yet to come this build).
 //
 // Tap targets:
-//   - Tap row when status is 'paid' → payment details sheet at
+//   - Tap the main row when status is 'paid' → payment details sheet at
 //     `/bills/<id>/payment-details?period=<YYYY-MM>` (decision 24 — split
 //     paid vs unpaid intents to avoid accidental double-payment).
-//   - Tap row when status is anything else → mark-as-paid sheet at
+//   - Tap the main row when status is anything else → mark-as-paid sheet at
 //     `/bills/<id>/mark-paid`.
-//   - Long-press row → edit screen at `/bills/<id>`. Long-press is the chosen
-//     edit affordance because the row is a tight target and an "Edit" button
-//     would crowd the amount column. The Bills tab also exposes the edit path
-//     through the floating + (for create); for now long-press keeps the
-//     surface clean.
+//   - Tap the "•••" overflow button on the right → action menu (Alert) with
+//     status-aware options (Edit bill, View payment details when paid).
+//     This is the discoverable path to edit; surfaces edit as a clear,
+//     visible affordance instead of hiding it behind long-press alone.
+//   - Long-press the row → still goes straight to edit, kept as a power-user
+//     shortcut. The overflow menu is the primary discoverable path.
+//
+// Layout: the row uses two sibling Pressables inside a flex container — a
+// large "tap zone" for the main action and a small overflow button. Sibling
+// Pressables avoid the nested-press hit-testing flake we'd see with a
+// Pressable-inside-a-Pressable layout.
 //
 // Business logic stays in /logic. This component only branches on the kind of
 // the BillStatus discriminated union and on the wallet color.
 
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { formatCurrency } from '@/logic/currency';
@@ -90,89 +96,172 @@ export function BillRow({
     subLabel = 'Unpaid';
   }
 
-  return (
-    <Pressable
-      onPress={() => {
-        if (isPaid) {
+  function handleMainTap() {
+    if (isPaid) {
+      router.push({
+        pathname: '/bills/[id]/payment-details',
+        params: { id: bill.id, period },
+      });
+    } else {
+      router.push({
+        pathname: '/bills/[id]/mark-paid',
+        params: { id: bill.id },
+      });
+    }
+  }
+
+  function handleEditPush() {
+    router.push({ pathname: '/bills/[id]', params: { id: bill.id } });
+  }
+
+  function handleOverflowTap() {
+    // Status-aware action menu. Paid bills offer "View payment details" as
+    // a direct path to the same place a row tap goes — useful when the user
+    // wants to inspect/undo without conflating with the menu's "Edit" intent.
+    // Unpaid bills skip "View payment details" because there's no payment
+    // to show; "Mark as paid" is already the row tap, no need to duplicate.
+    const buttons: Array<{
+      text: string;
+      style?: 'default' | 'cancel' | 'destructive';
+      onPress?: () => void;
+    }> = [];
+
+    if (isPaid) {
+      buttons.push({
+        text: 'View payment details',
+        onPress: () =>
           router.push({
             pathname: '/bills/[id]/payment-details',
             params: { id: bill.id, period },
-          });
-        } else {
-          router.push({
-            pathname: '/bills/[id]/mark-paid',
-            params: { id: bill.id },
-          });
-        }
-      }}
-      onLongPress={() =>
-        router.push({ pathname: '/bills/[id]', params: { id: bill.id } })
-      }
-      delayLongPress={350}
-      accessibilityRole="button"
-      accessibilityLabel={
-        isPaid
-          ? `${bill.name}, ${formatCurrency(amount)}, paid. Tap to view payment details, long press to edit the bill.`
-          : `${bill.name}, ${formatCurrency(amount)}. Tap to mark as paid, long press to edit the bill.`
-      }
-      style={({ pressed }) => [
-        styles.row,
+          }),
+      });
+    }
+    buttons.push({ text: 'Edit bill', onPress: handleEditPush });
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert(bill.name, undefined, buttons);
+  }
+
+  return (
+    <View
+      style={[
+        styles.rowContainer,
         {
-          backgroundColor: pressed ? theme.colors.surfaceMuted : theme.colors.surface,
+          backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
-          opacity: isPaid ? theme.opacity.paid : 1,
           borderLeftWidth: accent ? 3 : 0,
           borderLeftColor: accent ?? 'transparent',
-          paddingLeft: accent ? theme.spacing.md : theme.spacing.lg,
-          paddingRight: theme.spacing.lg,
-          paddingVertical: theme.spacing.md,
+          opacity: isPaid ? theme.opacity.paid : 1,
         },
       ]}
     >
-      <View style={styles.left}>
+      <Pressable
+        onPress={handleMainTap}
+        onLongPress={handleEditPush}
+        delayLongPress={350}
+        accessibilityRole="button"
+        accessibilityLabel={
+          isPaid
+            ? `${bill.name}, ${formatCurrency(amount)}, paid. Tap to view payment details.`
+            : `${bill.name}, ${formatCurrency(amount)}. Tap to mark as paid.`
+        }
+        style={({ pressed }) => [
+          styles.tapZone,
+          {
+            backgroundColor: pressed
+              ? theme.colors.surfaceMuted
+              : 'transparent',
+            paddingLeft: accent ? theme.spacing.md : theme.spacing.lg,
+            paddingVertical: theme.spacing.md,
+          },
+        ]}
+      >
+        <View style={styles.left}>
+          <Text
+            style={[
+              theme.typography.body.md,
+              {
+                color: nameColor,
+                textDecorationLine: isPaid ? 'line-through' : 'none',
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {bill.name}
+          </Text>
+          {subLabel ? (
+            <Text
+              style={[
+                theme.typography.label.md,
+                { color: subColor, marginTop: 2 },
+              ]}
+              numberOfLines={1}
+            >
+              {subLabel}
+            </Text>
+          ) : null}
+        </View>
         <Text
           style={[
             theme.typography.body.md,
             {
-              color: nameColor,
+              color: amountColor,
               textDecorationLine: isPaid ? 'line-through' : 'none',
+              fontWeight: theme.typography.weights.medium,
             },
           ]}
-          numberOfLines={1}
         >
-          {bill.name}
+          {formatCurrency(amount)}
         </Text>
-        {subLabel ? (
-          <Text
-            style={[theme.typography.label.md, { color: subColor, marginTop: 2 }]}
-            numberOfLines={1}
-          >
-            {subLabel}
-          </Text>
-        ) : null}
-      </View>
-      <Text
-        style={[
-          theme.typography.body.md,
+      </Pressable>
+
+      <Pressable
+        onPress={handleOverflowTap}
+        accessibilityRole="button"
+        accessibilityLabel={`More actions for ${bill.name}`}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.overflowButton,
           {
-            color: amountColor,
-            textDecorationLine: isPaid ? 'line-through' : 'none',
-            fontWeight: theme.typography.weights.medium,
+            backgroundColor: pressed
+              ? theme.colors.surfaceMuted
+              : 'transparent',
           },
         ]}
       >
-        {formatCurrency(amount)}
-      </Text>
-    </Pressable>
+        <Text
+          style={[
+            theme.typography.body.md,
+            {
+              color: theme.colors.textMuted,
+              fontWeight: theme.typography.weights.medium,
+            },
+          ]}
+        >
+          {'⋯' /* horizontal ellipsis ⋯ */}
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  rowContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  tapZone: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingRight: 4,
+  },
+  overflowButton: {
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   left: { flex: 1, marginRight: 12 },
 });
