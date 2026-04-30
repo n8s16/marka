@@ -196,14 +196,11 @@ export function BillRow({
     <Swipeable
       ref={swipeableRef}
       renderRightActions={renderRightActions}
-      // A small overshoot on swipe end keeps the action buttons visible
-      // when the user releases mid-drag — feels more iOS-native.
-      overshootRight={false}
-      friction={2}
+      // friction defaults to 1 (natural swipe). The actions container is
+      // ~76px wide per button, so rightThreshold ~half of that feels right.
       rightThreshold={40}
-      // The whole row is a swipeable container; the inner Pressable handles
-      // the tap. The container view paints the row's background so the
-      // swipe reveals colored action buttons cleanly.
+      // The container paints the row's background so the swipe reveals
+      // colored action buttons cleanly.
       containerStyle={{
         backgroundColor: theme.colors.surface,
       }}
@@ -221,54 +218,70 @@ export function BillRow({
         style={({ pressed }) => [
           styles.row,
           {
+            // The row background must stay fully opaque — applying `opacity`
+            // to the whole row (instead of just the content) makes the
+            // action buttons revealed by Swipeable bleed through during and
+            // after the swipe. The dimming-for-paid effect lives on an
+            // inner wrapper View instead.
             backgroundColor: pressed
               ? theme.colors.surfaceMuted
               : theme.colors.surface,
             borderColor: theme.colors.border,
-            opacity: isPaid ? theme.opacity.paid : 1,
             borderLeftWidth: accent ? 3 : 0,
             borderLeftColor: accent ?? 'transparent',
             paddingLeft: accent ? theme.spacing.md : theme.spacing.lg,
           },
         ]}
       >
-        <View style={styles.left}>
+        <View
+          style={[
+            styles.contentWrapper,
+            {
+              // Dim the *content* (text + sub-label + amount) for paid bills
+              // — keeps the visual recede effect from the spreadsheet
+              // metaphor without compromising the row background.
+              opacity: isPaid ? theme.opacity.paid : 1,
+            },
+          ]}
+        >
+          <View style={styles.left}>
+            <Text
+              style={[
+                theme.typography.body.md,
+                {
+                  color: nameColor,
+                  textDecorationLine: isPaid ? 'line-through' : 'none',
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {bill.name}
+            </Text>
+            {subLabel ? (
+              <Text
+                style={[
+                  theme.typography.label.md,
+                  { color: subColor, marginTop: 2 },
+                ]}
+                numberOfLines={1}
+              >
+                {subLabel}
+              </Text>
+            ) : null}
+          </View>
           <Text
             style={[
               theme.typography.body.md,
               {
-                color: nameColor,
+                color: amountColor,
                 textDecorationLine: isPaid ? 'line-through' : 'none',
+                fontWeight: theme.typography.weights.medium,
               },
             ]}
-            numberOfLines={1}
           >
-            {bill.name}
+            {formatCurrency(amount)}
           </Text>
-          {subLabel ? (
-            <Text
-              style={[
-                theme.typography.label.md,
-                { color: subColor, marginTop: 2 },
-              ]}
-              numberOfLines={1}
-            >
-              {subLabel}
-            </Text>
-          ) : null}
         </View>
-        <Text
-          style={[
-            theme.typography.body.md,
-            {
-              color: amountColor,
-              textDecorationLine: isPaid ? 'line-through' : 'none',
-              fontWeight: theme.typography.weights.medium,
-            },
-          ]}
-        >
-          {formatCurrency(amount)}
-        </Text>
       </Pressable>
     </Swipeable>
   );
@@ -278,12 +291,14 @@ const ACTION_BUTTON_WIDTH = 76;
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: 16,
     paddingVertical: 14,
+  },
+  contentWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   left: { flex: 1, marginRight: 12 },
   actionsRow: {
