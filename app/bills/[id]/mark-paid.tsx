@@ -1,8 +1,11 @@
 // Mark-as-paid modal screen for an existing bill.
 //
 // Route: `/bills/<id>/mark-paid`. Opened by tapping a row on the Bills tab
-// (see components/bill-row.tsx). Presented as a modal — see the per-screen
-// `<Stack.Screen options={{ presentation: 'modal' }} />` declaration below.
+// (see components/bill-row.tsx). Modal presentation is declared by the
+// parent layout at `app/bills/[id]/_layout.tsx` — NOT inside this file.
+// Declaring it here from inside the screen is fragile in Expo Router 6
+// (the screen has to mount before it can register itself as a modal,
+// which can produce a half-open / re-resolve loop on some routes).
 //
 // PRD §"Supporting screens" — Mark as paid: pre-filled amount (editable),
 // wallet picker, paid date, period selector (defaults to bill's due-month,
@@ -28,7 +31,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns, parseISO } from 'date-fns';
 
 import { CurrencyInput } from '@/components/currency-input';
@@ -230,7 +233,6 @@ export default function MarkPaidScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.root}>
-        <Stack.Screen options={{ presentation: 'modal', headerShown: false }} />
         <View style={styles.center}>
           <Text style={[theme.typography.body.md, { color: theme.colors.textMuted }]}>
             Loading…
@@ -243,7 +245,6 @@ export default function MarkPaidScreen() {
   if (notFound || !bill) {
     return (
       <SafeAreaView style={styles.root}>
-        <Stack.Screen options={{ presentation: 'modal', headerShown: false }} />
         <View style={styles.center}>
           <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>
             Bill not found.
@@ -267,7 +268,6 @@ export default function MarkPaidScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
-      <Stack.Screen options={{ presentation: 'modal', headerShown: false }} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <Text style={[theme.typography.body.sm, { color: theme.colors.accent }]}>
