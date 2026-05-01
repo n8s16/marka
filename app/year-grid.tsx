@@ -5,16 +5,18 @@
 //   - Cells tinted by wallet color when paid, dashed border for forecasts,
 //     em-dash for non-due months.
 //
-// Layout strategy: a single outer vertical ScrollView whose contents are a
-// fixed-width bill-name column on the left and a horizontal ScrollView of
-// month columns on the right. Vertical scroll moves the whole row (name +
-// cells) together, which matches user expectations from a spreadsheet.
-// Horizontal scroll only affects the cell grid, leaving the bill-name
-// column visually pinned to the left.
+// Layout strategy: a vertical ScrollView with a sticky header row that
+// pins the month labels at the top. Inside the sticky header AND inside
+// the body, the cell columns live in horizontal ScrollViews that are
+// synchronized via Reanimated worklets — when the user pans horizontally
+// in either, the other follows on the UI thread without crossing the JS
+// bridge. This avoids the Android sync race that plagues onScroll +
+// scrollTo done in JS.
 //
-// This isn't a true sticky-column (e.g. via two synchronized ScrollViews),
-// but it gives the same UX with much less cross-platform risk. Synchronized
-// scroll is on the table only if device-side testing reveals a need.
+// Vertical scroll moves the bill-name column AND the cell rows together
+// (they're both inside the body row of the ScrollView). The bill-name
+// column doesn't horizontally scroll, so it reads as visually pinned to
+// the left while cells slide past.
 //
 // Data fetching lives in `state/year-grid.ts`. Cell resolution lives in
 // `logic/year-grid.ts` and is called per-cell during render.
@@ -30,6 +32,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Animated, {
+  scrollTo,
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+} from 'react-native-reanimated';
 
 import { CELL_HEIGHT, CELL_WIDTH, YearGridCell } from '@/components/year-grid-cell';
 import { useDb } from '@/db/client';
@@ -84,6 +91,25 @@ export default function YearGridScreen() {
     paymentsByBillByPeriod,
     recentPaymentsByBill,
   } = useYearGrid(db, year);
+
+  // Refs + worklet handlers for the two horizontal scrolls (header row +
+  // cell-rows body). Each handler scrolls the OTHER list to mirror its X
+  // offset. Done as worklets so the sync runs on the UI thread — no JS
+  // bridge round-trip, no visible lag.
+  const headerScrollRef = useAnimatedRef<Animated.ScrollView>();
+  const bodyScrollRef = useAnimatedRef<Animated.ScrollView>();
+
+  const headerScrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollTo(bodyScrollRef, e.contentOffset.x, 0, false);
+    },
+  });
+
+  const bodyScrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollTo(headerScrollRef, e.contentOffset.x, 0, false);
+    },
+  });
 
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
@@ -169,27 +195,64 @@ export default function YearGridScreen() {
           </View>
         ) : (
           <ScrollView
-            // Outer vertical ScrollView. The two columns scroll together
-            // vertically because they're siblings inside this view.
+            // Outer vertical ScrollView. stickyHeaderIndices=[0] pins the
+            // month-header row at the top while the bills scroll under.
             contentContainerStyle={styles.scrollContent}
+            stickyHeaderIndices={[0]}
           >
-            <View style={styles.row}>
-              {/* Left column: bill names. Same width as MonthHeader's name
-                  spacer so columns line up. */}
-              <View style={styles.nameColumn}>
-                {/* Spacer cell aligned with the month-header row in the
-                    right column so the first bill row sits at the same
-                    Y as its cells. */}
+            {/* Sticky header — index 0. Empty spacer for the name-column
+                gutter, then a horizontal ScrollView of month labels. */}
+            <View style={styles.stickyHeaderRow}>
+              <View
+                style={[
+                  styles.nameHeaderSpacer,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                    borderBottomWidth: theme.borderWidth.hairline,
+                    borderRightWidth: theme.borderWidth.hairline,
+                  },
+                ]}
+              />
+              <Animated.ScrollView
+                ref={headerScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={headerScrollHandler}
+              >
                 <View
                   style={[
-                    styles.nameHeaderSpacer,
+                    styles.monthHeaderRow,
                     {
+                      backgroundColor: theme.colors.surface,
                       borderColor: theme.colors.border,
                       borderBottomWidth: theme.borderWidth.hairline,
-                      backgroundColor: theme.colors.surface,
                     },
                   ]}
-                />
+                >
+                  {MONTH_LABELS.map((label) => (
+                    <View key={label} style={styles.monthHeaderCell}>
+                      <Text
+                        style={[
+                          theme.typography.label.md,
+                          {
+                            color: theme.colors.textFaint,
+                            textTransform: 'uppercase',
+                          },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </Animated.ScrollView>
+            </View>
+
+            {/* Body — bill-name column + horizontal cell-rows ScrollView. */}
+            <View style={styles.row}>
+              <View style={styles.nameColumn}>
                 {bills.map((bill) => (
                   <View
                     key={bill.id}
@@ -216,46 +279,14 @@ export default function YearGridScreen() {
                 ))}
               </View>
 
-              {/* Right column: month-header row + cell rows, all wrapped
-                  in a horizontal ScrollView. */}
-              <ScrollView
+              <Animated.ScrollView
+                ref={bodyScrollRef}
                 horizontal
                 showsHorizontalScrollIndicator
-                // Keep the inner content tight against the left edge so
-                // the seam between the name column and the first cell
-                // column has no gap.
-                contentContainerStyle={styles.gridContent}
+                scrollEventThrottle={16}
+                onScroll={bodyScrollHandler}
               >
                 <View>
-                  {/* Month header row */}
-                  <View
-                    style={[
-                      styles.monthHeaderRow,
-                      {
-                        borderColor: theme.colors.border,
-                        borderBottomWidth: theme.borderWidth.hairline,
-                        backgroundColor: theme.colors.surface,
-                      },
-                    ]}
-                  >
-                    {MONTH_LABELS.map((label) => (
-                      <View key={label} style={styles.monthHeaderCell}>
-                        <Text
-                          style={[
-                            theme.typography.label.md,
-                            {
-                              color: theme.colors.textFaint,
-                              textTransform: 'uppercase',
-                            },
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* Cell rows */}
                   {bills.map((bill) => {
                     const paymentMap =
                       paymentsByBillByPeriod.get(bill.id) ??
@@ -305,7 +336,7 @@ export default function YearGridScreen() {
                     );
                   })}
                 </View>
-              </ScrollView>
+              </Animated.ScrollView>
             </View>
           </ScrollView>
         )}
@@ -341,6 +372,16 @@ function makeStyles(theme: Theme) {
       justifyContent: 'center',
       paddingHorizontal: theme.spacing.xxl,
     },
+    // Sticky header row paints the page background so content scrolling
+    // beneath doesn't bleed through.
+    stickyHeaderRow: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.bg,
+    },
+    nameHeaderSpacer: {
+      width: NAME_COL_WIDTH,
+      height: CELL_HEIGHT,
+    },
     row: {
       flexDirection: 'row',
       alignItems: 'flex-start',
@@ -348,17 +389,10 @@ function makeStyles(theme: Theme) {
     nameColumn: {
       width: NAME_COL_WIDTH,
     },
-    nameHeaderSpacer: {
-      height: CELL_HEIGHT,
-    },
     nameCell: {
       height: CELL_HEIGHT,
       paddingHorizontal: theme.spacing.md,
       justifyContent: 'center',
-    },
-    gridContent: {
-      // No horizontal padding — the cells render their own hairline
-      // borders that need to butt up against the name column edge.
     },
     monthHeaderRow: {
       flexDirection: 'row',
