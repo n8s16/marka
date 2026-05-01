@@ -159,12 +159,12 @@ export function DateInput({
             value={date}
             mode="date"
             display="spinner"
-            // Force light appearance so the wheel text stays dark against our
-            // light-mode modal sheet. Without this, an iOS device in system
-            // dark mode renders the spinner with white-on-white text — fully
-            // interactive but invisible. When dark mode lands (build step 8)
-            // this becomes dynamic via the theme.
-            themeVariant="light"
+            // Bind the spinner's chrome to our theme so its wheel text stays
+            // legible against our modal sheet's surface. Without this, an iOS
+            // device in system dark mode could render the spinner with
+            // white-on-white text against our light surface (or vice versa
+            // when our app is dark and the OS is light).
+            themeVariant={theme.mode}
             textColor={theme.colors.text}
             onChange={handleChange}
           />
@@ -483,8 +483,8 @@ export function TimeInput({
             mode="time"
             is24Hour
             display="spinner"
-            // See DateInput for why we force light theme on the iOS spinner.
-            themeVariant="light"
+            // See DateInput for why we bind themeVariant to theme.mode.
+            themeVariant={theme.mode}
             textColor={theme.colors.text}
             onChange={handleChange}
           />

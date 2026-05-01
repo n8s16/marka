@@ -4,7 +4,9 @@
 // docs/DATA_MODEL.md §"Year grid cell resolution"):
 //
 //   - paid:     formatted amount, strikethrough, opacity 0.55, background
-//               tinted with the wallet brand color at low alpha (~15%).
+//               tinted with the wallet brand color at low alpha (~15% in
+//               light mode, ~25% in dark mode — neutral-gray and pure-blue
+//               wallets need a stronger tint to read against dark surfaces).
 //               Text color stays the theme's body text color — strikethrough
 //               + opacity convey "paid"; wallet tint conveys "from this
 //               wallet".
@@ -36,16 +38,20 @@ export interface YearGridCellProps {
 
 /**
  * Append a low-alpha hex byte to a 6-digit hex color so the wallet brand
- * shows through at ~15% opacity. Relies on every wallet color being stored
+ * shows through at low opacity. Relies on every wallet color being stored
  * as a 6-digit hex (which the seeded set and the fallback both satisfy).
  * Falls back to the input string unchanged if it doesn't match — better to
  * render slightly-wrong than to crash on an unexpected format.
+ *
+ * Alpha varies by theme mode:
+ *   - light: 0x26 (≈15%) — tuned against light surfaces.
+ *   - dark:  0x40 (≈25%) — neutral-gray and pure-blue wallets lose
+ *            visibility against dark surfaces at 15%.
  */
-function withLowAlpha(hex: string): string {
-  // 0x26 = 38 / 255 ≈ 15%. The Pressable also has its own transparent
-  // background by default, so this stacks cleanly on the screen surface.
-  if (/^#[0-9A-Fa-f]{6}$/.test(hex)) return `${hex}26`;
-  return hex;
+function withLowAlpha(hex: string, mode: 'light' | 'dark'): string {
+  if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return hex;
+  const alpha = mode === 'dark' ? '40' : '26';
+  return `${hex}${alpha}`;
 }
 
 export function YearGridCell({
@@ -56,7 +62,7 @@ export function YearGridCell({
   const theme = useTheme();
 
   if (cell.kind === 'paid') {
-    const tint = walletColor ? withLowAlpha(walletColor) : 'transparent';
+    const tint = walletColor ? withLowAlpha(walletColor, theme.mode) : 'transparent';
     return (
       <Pressable
         onPress={onPress}
