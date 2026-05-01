@@ -5,8 +5,8 @@
 //     intentionally excluded — see DATA_MODEL.md §"Critical rule").
 //   - Per-wallet outflow cards. Wallets with zero outflow still render but
 //     are visually greyed via `wallet-outflow-card.tsx`.
-//   - "Record a transfer" affordance at the bottom — stubbed in this build;
-//     wires up alongside the Spending tab in step 6.
+//   - "Record a transfer" affordance at the bottom — wired in step 6 to
+//     `/transfers/new`.
 //
 // Layout mirrors the Bills tab: SafeAreaView root, header with title only
 // (no top-right link), ScrollView with stickyHeaderIndices=[0] so the
@@ -18,7 +18,6 @@
 import { useMemo } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +25,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { format as formatDate } from 'date-fns';
 
 import { WalletOutflowCard } from '@/components/wallet-outflow-card';
@@ -39,6 +39,7 @@ export default function WalletsScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const db = useDb();
+  const router = useRouter();
 
   // Today is captured once per mount so all derived values agree across the
   // hook's memoized outputs and any locally-formatted strings.
@@ -52,12 +53,7 @@ export default function WalletsScreen() {
     useWalletsCurrentMonth(db, today);
 
   function handleRecordTransfer() {
-    // Stub: wire to /transfers/new in step 6.
-    Alert.alert(
-      'Coming soon',
-      'Transfer between wallets lands with the Spending tab in step 6.',
-      [{ text: 'OK' }],
-    );
+    router.push('/transfers/new');
   }
 
   return (
