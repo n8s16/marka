@@ -5,8 +5,12 @@
 //     intentionally excluded — see DATA_MODEL.md §"Critical rule").
 //   - Per-wallet outflow cards. Wallets with zero outflow still render but
 //     are visually greyed via `wallet-outflow-card.tsx`.
-//   - "Transfers" link at the top-right of the header — opens the
-//     transfers history screen at /transfers (DECISIONS §26).
+//   - "Transfers · Settings" links at the top-right of the header — open
+//     the transfers history screen at /transfers (DECISIONS §26) and the
+//     Settings hub at /settings respectively. Two small accent-colored
+//     text links separated by a middle dot. The links are siblings inside
+//     a flex row on the right side of the header so the existing
+//     space-between layout keeps the title left-anchored.
 //   - Floating + button at bottom-right — records a new transfer at
 //     /transfers/new. Same FAB idiom as Bills (+ → /bills/new) and
 //     Spending (+ → /expenses/new) for visual consistency across tabs.
@@ -63,6 +67,10 @@ export default function WalletsScreen() {
     router.push('/transfers');
   }
 
+  function handleOpenSettings() {
+    router.push('/settings');
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <View style={styles.container}>
@@ -70,24 +78,56 @@ export default function WalletsScreen() {
           <Text style={[theme.typography.title.md, { color: theme.colors.text }]}>
             Wallets
           </Text>
-          <Pressable
-            onPress={handleViewTransfers}
-            accessibilityRole="button"
-            accessibilityLabel="View transfer history"
-            hitSlop={8}
-          >
+          {/* Right-side header links. Sub-row keeps Transfers and Settings
+              as siblings so the parent flex header stays a clean two-column
+              (title | links) layout. Middle dot is a static separator
+              (textFaint) between the two action links. */}
+          <View style={styles.headerLinks}>
+            <Pressable
+              onPress={handleViewTransfers}
+              accessibilityRole="button"
+              accessibilityLabel="View transfer history"
+              hitSlop={8}
+            >
+              <Text
+                style={[
+                  theme.typography.body.sm,
+                  {
+                    color: theme.colors.accent,
+                    fontWeight: theme.typography.weights.medium,
+                  },
+                ]}
+              >
+                Transfers
+              </Text>
+            </Pressable>
             <Text
               style={[
                 theme.typography.body.sm,
-                {
-                  color: theme.colors.accent,
-                  fontWeight: theme.typography.weights.medium,
-                },
+                { color: theme.colors.textFaint },
               ]}
             >
-              Transfers
+              {' · '}
             </Text>
-          </Pressable>
+            <Pressable
+              onPress={handleOpenSettings}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+              hitSlop={8}
+            >
+              <Text
+                style={[
+                  theme.typography.body.sm,
+                  {
+                    color: theme.colors.accent,
+                    fontWeight: theme.typography.weights.medium,
+                  },
+                ]}
+              >
+                Settings
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {loading ? (
@@ -180,6 +220,10 @@ function makeStyles(theme: Theme) {
       paddingHorizontal: theme.spacing.lg,
       paddingTop: theme.spacing.md,
       paddingBottom: theme.spacing.md,
+    },
+    headerLinks: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     scrollContent: { paddingBottom: theme.spacing.xxxl },
     stickyHeader: {
