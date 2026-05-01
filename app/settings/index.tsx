@@ -4,9 +4,9 @@
 // Per docs/PRD.md §"Supporting screens" — Settings, this is the parent
 // screen for manage-wallets, manage-bills, categories, theme, app lock,
 // notifications, export, and backup status. PR 10a wired Wallets; PR 10b
-// wires Bills and Categories. The remaining categories (Theme, App lock,
-// Export) still render as disabled "Coming soon" rows so the shell of
-// the Settings hub is in place for follow-up PRs (10c–10e) to drop into
+// wired Bills and Categories; PR 10c wired Theme; PR 10d wires App lock.
+// The remaining row (Export) still renders as disabled "Coming soon" so
+// the shell of the Settings hub is in place for PR 10e to drop into
 // without restructuring.
 //
 // Layout mirrors `app/transfers/index.tsx`: SafeAreaView root, header
@@ -60,8 +60,8 @@ const ROWS: ReadonlyArray<SettingsRow> = [
   {
     key: 'app-lock',
     title: 'App lock',
-    subtitle: 'Require biometrics or PIN to open',
-    href: null,
+    subtitle: 'Require biometric unlock to open the app',
+    href: '/settings/app-lock',
   },
   {
     key: 'export',
