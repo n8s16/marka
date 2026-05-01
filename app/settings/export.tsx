@@ -16,15 +16,13 @@
 //      file to the document directory, hand it to the share sheet.
 //
 //   2. Export as CSV — same fetch, but the snapshot is rendered through
-//      `exportToCsv` into six per-table CSVs. We chose Option A (sequential
-//      / files-app handoff): write all six to documentDirectory under a
-//      timestamped subfolder, then open the share sheet for the FIRST file
-//      with a follow-up info banner naming the rest. The trade-off: one
-//      tap shares one CSV; the others sit in the Files app for the user to
-//      open later. This preserves the per-table structure the PRD asks for
-//      without pulling in a zip dependency. If a later iteration finds a
-//      cleaner multi-file share path on a given platform, swap it in here —
-//      `logic/export.ts` (the source of truth for the bytes) doesn't change.
+//      `exportToCsv` into six per-table CSVs. We zip them with `jszip`
+//      (pure JS, no native deps) into a single archive and share that.
+//      This was originally Option A (write to a folder, share the first
+//      file, point at the Files app for the rest) but real-device testing
+//      surfaced the obvious flaw: most users only saw the first CSV and
+//      missed the "go find the others in Files app" alert. One zip, one
+//      share, all tables — clean.
 //
 // On any error: surface inline as red text. Never throws to a global handler.
 //
@@ -43,9 +41,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Directory, File, Paths } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { format } from 'date-fns';
+import JSZip from 'jszip';
 
 import { useDb } from '@/db/client';
 import { listBillPayments } from '@/db/queries/bill-payments';
@@ -157,55 +156,39 @@ export default function ExportScreen() {
       const csvs = exportToCsv(snapshot);
       const stamp = format(new Date(), 'yyyy-MM-dd');
 
-      // Stash all CSVs in a single timestamped subdirectory so re-exporting
-      // doesn't litter the document root with rotating filenames. The user
-      // can find them all in one place via the Files app.
-      const folder = new Directory(Paths.document, `marka-csv-${stamp}`);
-      // idempotent:true → no error if the folder exists from an earlier
-      // export attempt today; we'll just re-write the files inside it.
-      folder.create({ idempotent: true });
-
-      const written: File[] = [];
+      // Zip the six per-table CSVs into a single archive. JSZip is pure
+      // JS (no native code) so this works in Expo Go without any native
+      // module setup. Output as a Uint8Array so we can hand the bytes
+      // straight to expo-file-system's File.write.
+      const zip = new JSZip();
       for (const table of CSV_TABLES) {
         const body = csvs.get(table);
         if (body === undefined) continue; // defensive — exportToCsv populates all six
-        const file = new File(folder, `marka-${table}-${stamp}.csv`);
-        file.create({ overwrite: true });
-        file.write(body);
-        written.push(file);
+        zip.file(`marka-${table}-${stamp}.csv`, body);
       }
+      const zipBytes = await zip.generateAsync({ type: 'uint8array' });
+
+      const file = new File(Paths.document, `marka-csv-${stamp}.zip`);
+      file.create({ overwrite: true });
+      file.write(zipBytes);
 
       const canShare = await Sharing.isAvailableAsync();
-      if (!canShare || written.length === 0) {
+      if (!canShare) {
         setStatus({
           kind: 'success',
-          message: `${written.length} CSV files saved to your device.`,
+          message: `Saved to ${file.uri} — sharing isn't available on this device.`,
         });
         return;
       }
 
-      // Option A: open the share sheet for the FIRST file. Surface a
-      // post-share message naming the rest so the user knows where to
-      // find them.
-      const [first, ...rest] = written;
-      await Sharing.shareAsync(first.uri, {
-        mimeType: 'text/csv',
-        UTI: 'public.comma-separated-values-text',
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/zip',
+        UTI: 'public.zip-archive',
         dialogTitle: 'Export Marka data',
       });
-
-      const restNames = rest
-        .map((f) => f.uri.split('/').pop())
-        .filter((s): s is string => typeof s === 'string')
-        .join(', ');
       setStatus({
         kind: 'success',
-        message:
-          rest.length > 0
-            ? `Shared the first file. ${rest.length} more CSV${
-                rest.length === 1 ? '' : 's'
-              } saved alongside it: ${restNames}. Open them via the Files app.`
-            : 'CSV export ready.',
+        message: 'CSV export ready (six files inside one zip). Choose where to save it.',
       });
     } catch (err) {
       setStatus({
