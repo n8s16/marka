@@ -5,30 +5,34 @@
 //   - When `enabled` is false, the gate is a pass-through: render children.
 //   - When `enabled` is true, render children only after a successful
 //     biometric authentication. Cold start starts locked. Returning from
-//     background re-locks.
+//     a real background re-locks.
 //
-// State model:
-//   - `enabled` lives in the persisted store (`state/app-lock.ts`).
-//   - `unlocked` is local to this component and explicitly NOT persisted —
-//     it must reset on every cold start so the user re-authenticates.
+// State model — both flags live in `state/app-lock.ts`:
+//   - `enabled` is persisted; survives cold starts.
+//   - `unlocked` is transient (NOT persisted); resets to false on cold
+//     start so the user re-authenticates. Living in the store rather than
+//     in component state lets Settings flip `enabled` AND `unlocked`
+//     atomically via `enableAndUnlockAppLock()`, avoiding a render-race
+//     where the gate would briefly see the user as locked out of the
+//     screen they just authenticated on.
 //
-// Background-transition handling:
-//   - Subscribe to `AppState`. When the app moves to `background` or
-//     `inactive`, set `unlocked = false`. The next `active` will surface the
-//     lock screen, which auto-prompts on mount.
-//
-// "Just enabled" UX subtlety:
-//   - The Settings screen calls `setAppLockEnabled(true)` only after a
-//     biometric verification. The user is already in a verified context, so
-//     we don't want to immediately lock them out. We watch `enabled` for a
-//     false→true transition and set `unlocked = true` in the same tick.
-//     The next background→foreground will re-lock, as expected.
+// AppState listener:
+//   - We listen ONLY for `'background'`, not `'inactive'`. iOS fires
+//     `inactive` for system overlays (Control Center pulldown, the
+//     biometric prompt itself, incoming call) — treating those as
+//     "user backgrounded the app" produces aggressive re-locking that
+//     fights the verify-before-commit flow on the Settings toggle.
+//     `background` is the real "user left the app" signal.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppState, type AppStateStatus, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 
-import { useAppLockEnabled } from '@/state/app-lock';
+import {
+  setAppLockUnlocked,
+  useAppLockEnabled,
+  useAppLockUnlocked,
+} from '@/state/app-lock';
 import { useTheme } from '@/state/theme';
 import type { Theme } from '@/styles/theme';
 
@@ -38,26 +42,15 @@ interface AppLockGateProps {
 
 export function AppLockGate({ children }: AppLockGateProps): React.ReactElement {
   const enabled = useAppLockEnabled();
-  const [unlocked, setUnlocked] = useState<boolean>(false);
-
-  // Track the previous `enabled` value to detect false→true transitions
-  // ("just enabled from Settings"). On that transition, the user is already
-  // in a verified context — leave them unlocked until the next background.
-  const prevEnabledRef = useRef<boolean>(enabled);
-  useEffect(() => {
-    const prev = prevEnabledRef.current;
-    if (!prev && enabled) {
-      setUnlocked(true);
-    }
-    prevEnabledRef.current = enabled;
-  }, [enabled]);
+  const unlocked = useAppLockUnlocked();
 
   // Background transitions re-lock the app. We listen at the gate level
   // (not per-screen) so every screen gets the behavior for free.
+  // 'inactive' is intentionally NOT included — see the file header.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'background' || next === 'inactive') {
-        setUnlocked(false);
+      if (next === 'background') {
+        setAppLockUnlocked(false);
       }
     });
     return () => sub.remove();
@@ -67,7 +60,7 @@ export function AppLockGate({ children }: AppLockGateProps): React.ReactElement 
     return <>{children}</>;
   }
 
-  return <LockScreen onUnlock={() => setUnlocked(true)} />;
+  return <LockScreen onUnlock={() => setAppLockUnlocked(true)} />;
 }
 
 // ---------- Lock screen ---------------------------------------------------

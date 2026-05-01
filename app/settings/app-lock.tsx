@@ -22,7 +22,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 
-import { setAppLockEnabled, useAppLockEnabled } from '@/state/app-lock';
+import {
+  enableAndUnlockAppLock,
+  setAppLockEnabled,
+  useAppLockEnabled,
+} from '@/state/app-lock';
 import { useTheme } from '@/state/theme';
 import type { Theme } from '@/styles/theme';
 
@@ -110,7 +114,13 @@ export default function AppLockScreen() {
         // not a separate app PIN).
       });
       if (result.success) {
-        setAppLockEnabled(true);
+        // Flip `enabled` AND `unlocked` atomically. If we only flipped
+        // `enabled`, the lock gate's next render would see the user as
+        // unverified and immediately auto-prompt a SECOND time on this
+        // exact screen — the user just authenticated, that's an
+        // infuriating UX bug. enableAndUnlockAppLock keeps the just-
+        // verified context.
+        enableAndUnlockAppLock();
       } else {
         setErrorMessage('Authentication cancelled — app lock not enabled.');
       }
