@@ -54,8 +54,8 @@ const ROWS: ReadonlyArray<SettingsRow> = [
   {
     key: 'theme',
     title: 'Theme',
-    subtitle: 'Light, dark, or system',
-    href: null,
+    subtitle: 'Light, Dark, or System',
+    href: '/settings/theme',
   },
   {
     key: 'app-lock',

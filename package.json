@@ -15,6 +15,7 @@
     "kill:metro": "lsof -ti:8081 | xargs -r kill"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "date-fns": "4.1.0",
     "drizzle-orm": "0.36.4",

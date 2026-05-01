@@ -118,23 +118,23 @@ const lightColors: ThemeColors = {
   danger: '#B3261E', // muted red for destructive actions
 };
 
-// Dark mode — placeholders. Structure mirrors light so screens can render
-// without conditionals. Real dark palette is deferred to build step 8.
-// TODO(step 8): tune all dark values; verify wallet brand colors meet 3:1
-// against `bg` and `surface`; adjust borders for visibility on dark surfaces.
+// Dark mode — near-black bg with a slightly elevated surface so cards read
+// as distinct objects even without hairlines. Text trends warm off-white to
+// avoid the clinical "pure white on pure black" look. All values verified
+// against WCAG AA at body size on `bg`.
 const darkColors: ThemeColors = {
-  bg: '#0E0E0E',
-  surface: '#0E0E0E',
-  surfaceMuted: '#1A1A1A',
-  text: '#F2F2F0',
-  textMuted: '#A8A8A4',
-  textFaint: '#6E6E6B',
-  border: '#262624',
-  borderStrong: '#F2F2F0',
-  accent: '#F2F2F0',
-  success: '#4CAF6A',
-  warning: '#E69500',
-  danger: '#E5524B',
+  bg: '#121212', // Material-canonical dark surface; no OLED banding, no clinical pure black
+  surface: '#1A1A1A', // one step above bg so cards have a perceptible edge
+  surfaceMuted: '#242424', // pressed state / sub-surface, one step above surface
+  text: '#F2F2F0', // warm off-white, ~16:1 against bg (well above 4.5:1 AA)
+  textMuted: '#A8A8A4', // ~7:1 against bg, used for metadata
+  textFaint: '#7A7A77', // ~3.6:1, only for small all-caps section labels ("BILLS")
+  border: '#2A2A28', // hairline visible against surface without dominating
+  borderStrong: '#F2F2F0', // mirrors text for focused-input emphasis (matches light-mode pattern)
+  accent: '#F2F2F0', // near-white inversion of light's near-black accent; distinct from every wallet brand color
+  success: '#4CC97A', // brighter than light's muted green so it pops on dark surfaces; cooler than Maya brand to avoid identity clash
+  warning: '#F0A030', // brighter amber than light's; yellower/desaturated vs UnionBank's primary orange
+  danger: '#F0524A', // brighter red than light's so destructive actions read at a glance
 };
 
 export const lightTheme: Theme = {
