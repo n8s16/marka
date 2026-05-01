@@ -3,10 +3,11 @@
 // Route: `/settings`. Reachable from the Wallets tab "Settings" header link.
 // Per docs/PRD.md §"Supporting screens" — Settings, this is the parent
 // screen for manage-wallets, manage-bills, categories, theme, app lock,
-// notifications, export, and backup status. PR 10a wires only Wallets;
-// the other categories render as disabled "Coming soon" rows so the
-// shell of the Settings hub is in place for follow-up PRs (10b–10e) to
-// drop into without restructuring.
+// notifications, export, and backup status. PR 10a wired Wallets; PR 10b
+// wires Bills and Categories. The remaining categories (Theme, App lock,
+// Export) still render as disabled "Coming soon" rows so the shell of
+// the Settings hub is in place for follow-up PRs (10c–10e) to drop into
+// without restructuring.
 //
 // Layout mirrors `app/transfers/index.tsx`: SafeAreaView root, header
 // with Back link + centered title, ScrollView body. No FAB — Settings
@@ -41,14 +42,14 @@ const ROWS: ReadonlyArray<SettingsRow> = [
   {
     key: 'bills',
     title: 'Bills',
-    subtitle: 'Manage and restore archived bills',
-    href: null,
+    subtitle: 'Edit, archive, or unarchive any bill',
+    href: '/settings/bills',
   },
   {
     key: 'categories',
     title: 'Categories',
-    subtitle: 'Edit and reorder spending categories',
-    href: null,
+    subtitle: 'Add, rename, or archive expense categories',
+    href: '/settings/categories',
   },
   {
     key: 'theme',
