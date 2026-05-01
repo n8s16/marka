@@ -49,7 +49,7 @@ The following decisions are locked. Do not relitigate without explicit user appr
 - **Flexible date entry with a soft warning** when the date is more than 30 days in the past
 - **Centavos optional in input**, two decimals always shown in display
 - **Theme picker** (Light / Dark / System), defaulting to System
-- **App lock** via biometrics or PIN, available in Settings, off by default
+- **App lock** via biometrics (Face ID, Touch ID, fingerprint), available in Settings, off by default
 - **OS-level auto-backup** (data file in iCloud / Google Drive backup location)
 - **Manual export** to JSON (full fidelity) and CSV (per-table, for spreadsheets)
 - **8 starter categories**: Food, Transport, Shopping, Tech, Health, Entertainment, Personal, Misc — user-editable, archive-not-delete
@@ -124,7 +124,7 @@ These are the answers to questions that came up during design. They go here so f
 - **Currency display**: always two decimals, comma-separated thousands, peso sign prefix: `₱1,599.00`. Used everywhere — Bills, Spending, Wallets, Insights, year grid, exports.
 - **Backups**: data file lives in iCloud (iOS) / Google Drive (Android) backup-eligible location. No code beyond placing the file correctly. Manual export from Settings produces a JSON file (full fidelity) or per-table CSVs (for spreadsheets). Both export options include archived records.
 - **Theme**: defaults to System. The user can override in Settings → Preferences → Theme. Mid-session theme changes (system day-night switch) are reflected immediately when System is selected.
-- **App lock**: off by default. When enabled, the user is prompted to authenticate immediately to verify biometrics work before the toggle commits. Once enabled, every cold start and every return-from-background prompts for authentication. No auto-lock-after-idle in v1.
+- **App lock**: biometric-only in v1 (Face ID, Touch ID, fingerprint — see DECISIONS §27 for why PIN fallback is deferred). Off by default. When enabling, the user is prompted to authenticate immediately to verify biometrics work before the toggle commits. Once enabled, every cold start and every return-from-background prompts for authentication. No auto-lock-after-idle in v1.
 
 ## Open product questions
 

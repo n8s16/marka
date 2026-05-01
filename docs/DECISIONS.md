@@ -361,6 +361,22 @@ The transfers list is **all-time** (not current-month). Transfers are infrequent
 
 ---
 
+## 27. App lock is biometric-only in v1; PIN fallback deferred
+
+**Question:** What v1 unlock methods does the App lock screen support — biometrics only, or biometrics + a PIN fallback?
+
+**Decision:** Biometrics only for v1. PIN fallback is deferred. If the user later asks for it, it lands as an additive PR — no schema or storage changes required, just a new state field and entry/setup flows.
+
+**Why:** The PRD's "What's in v1" lists "biometrics or PIN," but the detailed Behavior decision only mentions biometrics — leaving room for either interpretation. For the user's actual context (a Filipino backend developer on a modern phone with Face ID or fingerprint), biometric-only is sufficient. PIN fallback adds non-trivial complexity: a PIN setup screen, a PIN entry screen, hashed-storage requirements, a PIN-reset flow. None of that is justified for v1's single-user scope.
+
+The verify-before-commit detail (prompt biometrics first, only persist `enabled = true` on success) prevents the "I turned it on but my biometrics broke" trap. Biometrics also covers the realistic recovery cases — Face ID falls back to Touch ID on supported devices, and the OS handles enrollment changes. If the user ends up locked out (lost biometric access entirely), the v1 fallback is uninstall + reinstall: data restores from the OS-level backup.
+
+The v1 PRD copy in `What's in v1` and `Behavior decisions` was updated to say "biometrics" rather than "biometrics or PIN" so the spec matches what's actually built.
+
+**Considered and rejected:** Full PIN fallback. Adds ~200 lines of code, separate UI flows, and a security surface (PIN storage) for a recovery path the user is unlikely to need. If real use later proves PIN is needed (e.g. a user updates iOS and Face ID stops working temporarily), it's an additive PR — the persisted store is shaped to grow a `method` field without migrating storage.
+
+---
+
 ## How to use this document
 
 When making future decisions:
