@@ -101,6 +101,7 @@ The MVP wireframes have been agreed on. Detailed wireframes exist as references;
 - **Add / edit bill** — name, expected amount, frequency (monthly / quarterly / yearly / custom — custom takes an interval in months), first due date (one combined date picker — the day-of-month becomes the bill's recurring due-day; the year-month anchors quarterly / yearly / custom cadences; pre-filled to today), default payment source, reminder offset (days before) and reminder time (time of day), auto-forecast toggle.
 - **Add / edit expense** — description, amount (optional), category, wallet, date, optional note.
 - **Add / edit transfer** — from wallet, to wallet, amount, date, optional note.
+- **Transfers history** (full screen, accessed from a "View transfers" link on the Wallets tab) — chronological list of all transfers across all time, grouped by date, tap a row to edit. Mirrors the Spending tab's layout pattern. Transfers don't appear on the Spending tab (they aren't spending) and don't roll into Wallets-tab outflow numbers (per `DATA_MODEL.md` §"Critical rule"), so this is the only place transfers are visible after recording.
 - **Manage wallets** (Settings sub-screen) — list with edit, archive, color picker, show-balance toggle. When show-balance is enabled for the first time, prompts for current balance and back-computes opening balance.
 - **Settings** — manage wallets, manage bills, categories, currency (PHP), theme (Light / Dark / System), notifications, export to JSON/CSV, backup status, app lock toggle.
 

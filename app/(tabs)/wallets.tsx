@@ -5,8 +5,11 @@
 //     intentionally excluded — see DATA_MODEL.md §"Critical rule").
 //   - Per-wallet outflow cards. Wallets with zero outflow still render but
 //     are visually greyed via `wallet-outflow-card.tsx`.
-//   - "Record a transfer" affordance at the bottom — wired in step 6 to
-//     `/transfers/new`.
+//   - "Transfers" link at the top-right of the header — opens the
+//     transfers history screen at /transfers (DECISIONS §26).
+//   - Floating + button at bottom-right — records a new transfer at
+//     /transfers/new. Same FAB idiom as Bills (+ → /bills/new) and
+//     Spending (+ → /expenses/new) for visual consistency across tabs.
 //
 // Layout mirrors the Bills tab: SafeAreaView root, header with title only
 // (no top-right link), ScrollView with stickyHeaderIndices=[0] so the
@@ -56,6 +59,10 @@ export default function WalletsScreen() {
     router.push('/transfers/new');
   }
 
+  function handleViewTransfers() {
+    router.push('/transfers');
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <View style={styles.container}>
@@ -63,6 +70,24 @@ export default function WalletsScreen() {
           <Text style={[theme.typography.title.md, { color: theme.colors.text }]}>
             Wallets
           </Text>
+          <Pressable
+            onPress={handleViewTransfers}
+            accessibilityRole="button"
+            accessibilityLabel="View transfer history"
+            hitSlop={8}
+          >
+            <Text
+              style={[
+                theme.typography.body.sm,
+                {
+                  color: theme.colors.accent,
+                  fontWeight: theme.typography.weights.medium,
+                },
+              ]}
+            >
+              Transfers
+            </Text>
+          </Pressable>
         </View>
 
         {loading ? (
@@ -118,35 +143,27 @@ export default function WalletsScreen() {
               </View>
             )}
 
-            <Pressable
-              onPress={handleRecordTransfer}
-              accessibilityRole="button"
-              accessibilityLabel="Record a transfer"
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.transferButton,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: pressed
-                    ? theme.colors.surfaceMuted
-                    : theme.colors.surface,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  theme.typography.body.sm,
-                  {
-                    color: theme.colors.accent,
-                    fontWeight: theme.typography.weights.medium,
-                  },
-                ]}
-              >
-                Record a transfer
-              </Text>
-            </Pressable>
           </ScrollView>
         )}
+
+        {/* Floating + button — records a new transfer. Mirrors the FAB
+            pattern from Bills (→ /bills/new) and Spending (→ /expenses/new)
+            for cross-tab visual consistency. */}
+        <Pressable
+          onPress={handleRecordTransfer}
+          accessibilityRole="button"
+          accessibilityLabel="Record a transfer"
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.fab,
+            {
+              backgroundColor: theme.colors.accent,
+              opacity: pressed ? theme.opacity.muted : 1,
+            },
+          ]}
+        >
+          <Text style={[styles.fabIcon, { color: theme.colors.bg }]}>+</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -185,14 +202,25 @@ function makeStyles(theme: Theme) {
       paddingHorizontal: theme.spacing.xxl,
       paddingVertical: theme.spacing.xxxl,
     },
-    transferButton: {
-      marginTop: theme.spacing.lg,
-      marginHorizontal: theme.spacing.lg,
-      borderRadius: theme.radii.md,
-      borderWidth: theme.borderWidth.hairline,
-      paddingVertical: theme.spacing.md,
+    fab: {
+      position: 'absolute',
+      right: theme.spacing.xxl,
+      bottom: theme.spacing.xxl,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
       alignItems: 'center',
       justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 4,
+    },
+    fabIcon: {
+      fontSize: 28,
+      lineHeight: 32,
+      fontWeight: '500',
     },
   });
 }
