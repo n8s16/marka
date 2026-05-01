@@ -100,9 +100,14 @@ export default function AppLockScreen() {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Verify your identity to enable app lock',
         cancelLabel: 'Cancel',
-        // disableDeviceFallback keeps the prompt biometric-only on iOS,
-        // matching the v1 decision (DECISIONS §27 — biometrics only).
-        disableDeviceFallback: true,
+        // We intentionally do NOT set disableDeviceFallback:true. In Expo
+        // Go and on certain iOS configurations, that option causes
+        // authenticateAsync to silently return success:false without ever
+        // showing the prompt — even when biometrics work fine in other
+        // apps. The fallback to device passcode is also a natural
+        // recovery path that effectively serves as the "PIN fallback"
+        // mentioned in the PRD's v1 scope (the phone's own passcode,
+        // not a separate app PIN).
       });
       if (result.success) {
         setAppLockEnabled(true);

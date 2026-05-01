@@ -89,9 +89,12 @@ function LockScreen({ onUnlock }: LockScreenProps): React.ReactElement {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Unlock Marka',
         cancelLabel: 'Cancel',
-        // disableDeviceFallback keeps the prompt biometric-only on iOS,
-        // matching the v1 decision (DECISIONS §27 — biometrics only).
-        disableDeviceFallback: true,
+        // See app/settings/app-lock.tsx for why disableDeviceFallback is
+        // omitted. tl;dr: it caused silent success:false returns in Expo
+        // Go without ever showing the prompt. Letting the system fall
+        // back to the device passcode also gives the user a recovery
+        // path if biometrics break temporarily — same intent as the
+        // PRD's "biometrics or PIN" scope (the phone's own passcode).
       });
       if (result.success) {
         onUnlock();
