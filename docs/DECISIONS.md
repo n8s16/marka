@@ -337,6 +337,30 @@ Decomposing the picked date back into `(due_day, start_period)` is mechanical: t
 
 ---
 
+## 26. Transfer history lives on its own screen, not on Wallets or Spending
+
+**Question:** Where does the user view (and edit / undo) transfers after recording them?
+
+**Decision:** A dedicated **Transfers history screen** (route `/transfers`) reachable via a "View transfers" link on the Wallets tab. Lists all transfers across all time, grouped by date desc, tap to edit. Transfers do not appear on the Spending tab or in any Wallets-tab outflow surface.
+
+**Why:** When step 6 shipped the transfer creation flow, transfers were write-only — there was no UI path to read, edit, or delete them after creation. That's worse than not having transfers at all (data is captured but unreachable). Three places it could go:
+
+1. **Recent-transfers section on the Wallets tab** — most discoverable since Wallets is also where users record transfers, but mixes a per-wallet outflow surface with a separate-concept data list.
+2. **A dedicated Transfers screen reachable from Wallets** — clean separation of concerns; matches the Spending tab's "list-of-events" pattern; one extra tap (Wallets → "View transfers") doesn't matter for an infrequent operation.
+3. **Per-wallet detail screen** — drill in to a wallet card to see its in/out transfers + outflow events. Most context-rich but a much bigger build, and out of MVP scope.
+
+Option 2 won. Cheap, doesn't muddle the Wallets tab's "out this month" framing, mirrors the Spending tab's existing pattern. The link sits next to "Record a transfer" so users find it where they expect.
+
+The transfers list is **all-time** (not current-month). Transfers are infrequent enough that a current-month filter would frequently show empty, and an all-time list scrolls fine until volumes get large. A future date filter can be added if real use surfaces a need.
+
+**Considered and rejected:**
+- *Recent-transfers section on Wallets tab* — see option 1 above. Discoverability win, but the Wallets tab is currently focused and clean; mixing concepts erodes that.
+- *Per-wallet detail screen* — see option 3. Too big for v1.
+- *Showing transfers in the Spending tab* — explicitly conflicts with the data model's "Transfers are NOT spending" critical rule. Even with a visual separator, it would set up the wrong mental model.
+- *Current-month-only transfers list* — would frequently render empty for users who don't transfer often. The all-time list is simpler and more useful at this volume.
+
+---
+
 ## How to use this document
 
 When making future decisions:

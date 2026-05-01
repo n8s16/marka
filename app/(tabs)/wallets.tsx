@@ -5,8 +5,10 @@
 //     intentionally excluded — see DATA_MODEL.md §"Critical rule").
 //   - Per-wallet outflow cards. Wallets with zero outflow still render but
 //     are visually greyed via `wallet-outflow-card.tsx`.
-//   - "Record a transfer" affordance at the bottom — wired in step 6 to
-//     `/transfers/new`.
+//   - "Record a transfer" + "View transfers" affordances at the bottom.
+//     Record routes to /transfers/new (step 6); View routes to /transfers
+//     for the all-time history list (DECISIONS §26 — transfer history
+//     lives on its own screen, reachable from here).
 //
 // Layout mirrors the Bills tab: SafeAreaView root, header with title only
 // (no top-right link), ScrollView with stickyHeaderIndices=[0] so the
@@ -54,6 +56,10 @@ export default function WalletsScreen() {
 
   function handleRecordTransfer() {
     router.push('/transfers/new');
+  }
+
+  function handleViewTransfers() {
+    router.push('/transfers');
   }
 
   return (
@@ -118,33 +124,63 @@ export default function WalletsScreen() {
               </View>
             )}
 
-            <Pressable
-              onPress={handleRecordTransfer}
-              accessibilityRole="button"
-              accessibilityLabel="Record a transfer"
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.transferButton,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: pressed
-                    ? theme.colors.surfaceMuted
-                    : theme.colors.surface,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  theme.typography.body.sm,
+            <View style={styles.transferActions}>
+              <Pressable
+                onPress={handleRecordTransfer}
+                accessibilityRole="button"
+                accessibilityLabel="Record a transfer"
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.transferButton,
                   {
-                    color: theme.colors.accent,
-                    fontWeight: theme.typography.weights.medium,
+                    borderColor: theme.colors.border,
+                    backgroundColor: pressed
+                      ? theme.colors.surfaceMuted
+                      : theme.colors.surface,
                   },
                 ]}
               >
-                Record a transfer
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    theme.typography.body.sm,
+                    {
+                      color: theme.colors.accent,
+                      fontWeight: theme.typography.weights.medium,
+                    },
+                  ]}
+                >
+                  Record a transfer
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleViewTransfers}
+                accessibilityRole="button"
+                accessibilityLabel="View transfer history"
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.transferButton,
+                  {
+                    borderColor: theme.colors.border,
+                    backgroundColor: pressed
+                      ? theme.colors.surfaceMuted
+                      : theme.colors.surface,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    theme.typography.body.sm,
+                    {
+                      color: theme.colors.text,
+                      fontWeight: theme.typography.weights.regular,
+                    },
+                  ]}
+                >
+                  View transfers
+                </Text>
+              </Pressable>
+            </View>
           </ScrollView>
         )}
       </View>
@@ -185,9 +221,12 @@ function makeStyles(theme: Theme) {
       paddingHorizontal: theme.spacing.xxl,
       paddingVertical: theme.spacing.xxxl,
     },
-    transferButton: {
+    transferActions: {
       marginTop: theme.spacing.lg,
       marginHorizontal: theme.spacing.lg,
+      gap: theme.spacing.sm,
+    },
+    transferButton: {
       borderRadius: theme.radii.md,
       borderWidth: theme.borderWidth.hairline,
       paddingVertical: theme.spacing.md,
