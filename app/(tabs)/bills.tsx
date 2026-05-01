@@ -60,10 +60,7 @@ export default function BillsScreen() {
             Bills
           </Text>
           <Pressable
-            onPress={() => {
-              // TODO: wire to year grid in step 7
-              console.log('Year view tapped — wire in step 7.');
-            }}
+            onPress={() => router.push('/year-grid')}
             hitSlop={8}
           >
             <Text
