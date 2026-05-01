@@ -201,56 +201,55 @@ export default function YearGridScreen() {
             stickyHeaderIndices={[0]}
           >
             {/* Sticky header — index 0. Empty spacer for the name-column
-                gutter, then a horizontal ScrollView of month labels. */}
+                gutter, then a horizontal ScrollView of month labels. The
+                Animated.ScrollView is wrapped in a flex:1 View so it gets
+                explicit horizontal sizing within the flex row — without
+                the wrapper, RN's sticky layout was failing to constrain
+                the ScrollView's parent width and the months were wrapping
+                below the spacer instead of sitting next to it. */}
             <View style={styles.stickyHeaderRow}>
-              <View
-                style={[
-                  styles.nameHeaderSpacer,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                    borderBottomWidth: theme.borderWidth.hairline,
-                    borderRightWidth: theme.borderWidth.hairline,
-                  },
-                ]}
-              />
-              <Animated.ScrollView
-                ref={headerScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                scrollEventThrottle={16}
-                onScroll={headerScrollHandler}
-              >
-                <View
-                  style={[
-                    styles.monthHeaderRow,
-                    {
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.border,
-                      borderBottomWidth: theme.borderWidth.hairline,
-                    },
-                  ]}
+              <View style={styles.nameHeaderSpacer} />
+              <View style={styles.gridScrollWrapper}>
+                <Animated.ScrollView
+                  ref={headerScrollRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  onScroll={headerScrollHandler}
                 >
-                  {MONTH_LABELS.map((label) => (
-                    <View key={label} style={styles.monthHeaderCell}>
-                      <Text
-                        style={[
-                          theme.typography.label.md,
-                          {
-                            color: theme.colors.textFaint,
-                            textTransform: 'uppercase',
-                          },
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </Animated.ScrollView>
+                  <View
+                    style={[
+                      styles.monthHeaderRow,
+                      {
+                        backgroundColor: theme.colors.bg,
+                        borderColor: theme.colors.border,
+                        borderBottomWidth: theme.borderWidth.hairline,
+                      },
+                    ]}
+                  >
+                    {MONTH_LABELS.map((label) => (
+                      <View key={label} style={styles.monthHeaderCell}>
+                        <Text
+                          style={[
+                            theme.typography.label.md,
+                            {
+                              color: theme.colors.textFaint,
+                              textTransform: 'uppercase',
+                            },
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </Animated.ScrollView>
+              </View>
             </View>
 
-            {/* Body — bill-name column + horizontal cell-rows ScrollView. */}
+            {/* Body — bill-name column + horizontal cell-rows ScrollView.
+                Same flex:1 wrapper pattern as the sticky header so the
+                two horizontal scrolls align horizontally. */}
             <View style={styles.row}>
               <View style={styles.nameColumn}>
                 {bills.map((bill) => (
@@ -279,64 +278,66 @@ export default function YearGridScreen() {
                 ))}
               </View>
 
-              <Animated.ScrollView
-                ref={bodyScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator
-                scrollEventThrottle={16}
-                onScroll={bodyScrollHandler}
-              >
-                <View>
-                  {bills.map((bill) => {
-                    const paymentMap =
-                      paymentsByBillByPeriod.get(bill.id) ??
-                      EMPTY_PAYMENT_MAP;
-                    const recents =
-                      recentPaymentsByBill.get(bill.id) ?? EMPTY_PAYMENTS;
-                    return (
-                      <View key={bill.id} style={styles.cellRow}>
-                        {periods.map((period) => {
-                          const payment = paymentMap.get(period);
-                          const cell = getYearGridCell(
-                            bill,
-                            period,
-                            payment,
-                            recents,
-                          );
-                          const walletColor =
-                            cell.kind === 'paid'
-                              ? accentColorFor(
-                                  walletsById.get(cell.payment.wallet_id),
-                                )
-                              : null;
-                          const onPress = () => {
-                            if (cell.kind === 'paid') {
-                              router.push({
-                                pathname: '/bills/[id]/payment-details',
-                                params: { id: bill.id, period },
-                              });
-                            } else if (cell.kind === 'forecast') {
-                              router.push({
-                                pathname: '/bills/[id]/mark-paid',
-                                params: { id: bill.id },
-                              });
-                            }
-                            // not_due → no-op
-                          };
-                          return (
-                            <YearGridCell
-                              key={period}
-                              cell={cell}
-                              walletColor={walletColor}
-                              onPress={onPress}
-                            />
-                          );
-                        })}
-                      </View>
-                    );
-                  })}
-                </View>
-              </Animated.ScrollView>
+              <View style={styles.gridScrollWrapper}>
+                <Animated.ScrollView
+                  ref={bodyScrollRef}
+                  horizontal
+                  showsHorizontalScrollIndicator
+                  scrollEventThrottle={16}
+                  onScroll={bodyScrollHandler}
+                >
+                  <View>
+                    {bills.map((bill) => {
+                      const paymentMap =
+                        paymentsByBillByPeriod.get(bill.id) ??
+                        EMPTY_PAYMENT_MAP;
+                      const recents =
+                        recentPaymentsByBill.get(bill.id) ?? EMPTY_PAYMENTS;
+                      return (
+                        <View key={bill.id} style={styles.cellRow}>
+                          {periods.map((period) => {
+                            const payment = paymentMap.get(period);
+                            const cell = getYearGridCell(
+                              bill,
+                              period,
+                              payment,
+                              recents,
+                            );
+                            const walletColor =
+                              cell.kind === 'paid'
+                                ? accentColorFor(
+                                    walletsById.get(cell.payment.wallet_id),
+                                  )
+                                : null;
+                            const onPress = () => {
+                              if (cell.kind === 'paid') {
+                                router.push({
+                                  pathname: '/bills/[id]/payment-details',
+                                  params: { id: bill.id, period },
+                                });
+                              } else if (cell.kind === 'forecast') {
+                                router.push({
+                                  pathname: '/bills/[id]/mark-paid',
+                                  params: { id: bill.id },
+                                });
+                              }
+                              // not_due → no-op
+                            };
+                            return (
+                              <YearGridCell
+                                key={period}
+                                cell={cell}
+                                walletColor={walletColor}
+                                onPress={onPress}
+                              />
+                            );
+                          })}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Animated.ScrollView>
+              </View>
             </View>
           </ScrollView>
         )}
@@ -377,10 +378,25 @@ function makeStyles(theme: Theme) {
     stickyHeaderRow: {
       flexDirection: 'row',
       backgroundColor: theme.colors.bg,
+      // width: '100%' is needed because the sticky-header layout pass on
+      // some RN builds doesn't propagate the parent ScrollView's content
+      // width to its sticky children, leaving them effectively unsized.
+      width: '100%',
     },
+    // Transparent placeholder occupying the bill-name column gutter so the
+    // months ScrollView starts at the correct x offset. Intentionally has
+    // no background or borders so the row reads as a single header band
+    // instead of an "empty cell."
     nameHeaderSpacer: {
       width: NAME_COL_WIDTH,
       height: CELL_HEIGHT,
+    },
+    // Wraps each horizontal Animated.ScrollView inside the sticky header
+    // and the body row. flex:1 makes the ScrollView's container fill the
+    // remaining horizontal space after the bill-name gutter, instead of
+    // collapsing to its content width and breaking the flex row layout.
+    gridScrollWrapper: {
+      flex: 1,
     },
     row: {
       flexDirection: 'row',
