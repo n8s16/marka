@@ -109,12 +109,13 @@ const ZERO: OutflowBreakdown = { bills: 0, spending: 0, total: 0 };
 
 /** Lookback for anomaly detection. Matches the briefing. */
 const ANOMALY_LOOKBACK_MONTHS = 3;
-/** Trend window length. Exactly 6 months ending at the current month. */
-const TREND_MONTHS = 6;
+/** Default trend window length when the caller doesn't override it. */
+const DEFAULT_TREND_MONTHS = 6;
 
 export function useInsightsCurrentMonth(
   db: ExpoSQLiteDatabase,
   today: Date,
+  windowMonths: number = DEFAULT_TREND_MONTHS,
 ): InsightsCurrentMonthState {
   const [wallets, setWallets] = useState<Wallet[] | null>(null);
   const [categories, setCategories] = useState<Category[] | null>(null);
@@ -124,21 +125,22 @@ export function useInsightsCurrentMonth(
   const [error, setError] = useState<Error | null>(null);
 
   // Memoize date strings so the reload callback's identity only changes when
-  // the calendar day changes. The window covers TREND_MONTHS months ending at
-  // the current month (oldest = subMonths(today, TREND_MONTHS - 1)).
+  // the calendar day or windowMonths changes. The window covers windowMonths
+  // months ending at the current month (oldest = subMonths(today,
+  // windowMonths - 1)).
   const { currentPeriod, periods, dateFrom, dateTo } = useMemo(() => {
-    const oldest = subMonths(today, TREND_MONTHS - 1);
+    const oldest = subMonths(today, windowMonths - 1);
     const from = formatDate(startOfMonth(oldest), 'yyyy-MM-dd');
     const to = formatDate(endOfMonth(today), 'yyyy-MM-dd');
     const cp = formatDate(today, 'yyyy-MM');
-    // Build the periods array oldest → newest. Index 0 is TREND_MONTHS-1
+    // Build the periods array oldest → newest. Index 0 is windowMonths-1
     // months back; the last entry is the current month.
     const ps: string[] = [];
-    for (let i = TREND_MONTHS - 1; i >= 0; i--) {
+    for (let i = windowMonths - 1; i >= 0; i--) {
       ps.push(formatDate(subMonths(today, i), 'yyyy-MM'));
     }
     return { currentPeriod: cp, periods: ps, dateFrom: from, dateTo: to };
-  }, [today]);
+  }, [today, windowMonths]);
 
   const reload = useCallback(async () => {
     try {

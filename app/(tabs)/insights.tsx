@@ -21,7 +21,7 @@
 // Data fetching and derivation live in `state/insights-current-month.ts` —
 // this file is layout-only.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -38,10 +38,25 @@ import { InsightsByWalletCard } from '@/components/insights-by-wallet-card';
 import { InsightsEmptyState } from '@/components/insights-empty-state';
 import { InsightsSummaryCard } from '@/components/insights-summary-card';
 import { InsightsTrendChart } from '@/components/insights-trend-chart';
+import { SegmentedChips } from '@/components/segmented-chips';
 import { useDb } from '@/db/client';
 import { useInsightsCurrentMonth } from '@/state/insights-current-month';
 import { useTheme } from '@/state/theme';
 import type { Theme } from '@/styles/theme';
+
+// Trend window options for the picker above the chart. Default 6 keeps
+// parity with the PRD's original "6-month trend chart" framing; longer
+// windows are user-driven for "how does this Q1 compare to last Q1?"
+// kinds of questions. Values are strings so SegmentedChips's generic
+// constraint (T extends string) is happy; we parse to int at the hook
+// boundary.
+type WindowChoice = '3' | '6' | '12' | '24';
+const WINDOW_OPTIONS: ReadonlyArray<{ value: WindowChoice; label: string }> = [
+  { value: '3', label: '3M' },
+  { value: '6', label: '6M' },
+  { value: '12', label: '12M' },
+  { value: '24', label: '24M' },
+];
 
 // Anomaly lookback the hook uses internally — restated here so the card's
 // sub-label copy ("over the last N months") stays in sync without crossing
@@ -61,6 +76,12 @@ export default function InsightsScreen() {
     [today],
   );
 
+  // Trend window picker — transient (resets to 6 on app launch). The
+  // user picks via the chips above the chart; the hook re-fetches when
+  // the window changes.
+  const [windowChoice, setWindowChoice] = useState<WindowChoice>('6');
+  const windowMonths = parseInt(windowChoice, 10);
+
   const {
     loading,
     error,
@@ -72,7 +93,7 @@ export default function InsightsScreen() {
     trend,
     trendByWallet,
     anomalies,
-  } = useInsightsCurrentMonth(db, today);
+  } = useInsightsCurrentMonth(db, today, windowMonths);
 
   // Wallet list for the chart's stacked bars — uses the by-wallet rows
   // (active wallets only). The chart accepts archived-only walletIds in
@@ -149,6 +170,14 @@ export default function InsightsScreen() {
               <InsightsEmptyState />
             ) : (
               <>
+                <View style={styles.windowPickerRow}>
+                  <SegmentedChips
+                    label="Trend window"
+                    options={WINDOW_OPTIONS}
+                    value={windowChoice}
+                    onChange={setWindowChoice}
+                  />
+                </View>
                 <InsightsTrendChart
                   data={trendByWallet}
                   wallets={chartWallets}
@@ -192,6 +221,10 @@ function makeStyles(theme: Theme) {
       backgroundColor: theme.colors.bg,
       paddingTop: theme.spacing.xs,
       paddingBottom: theme.spacing.xs,
+    },
+    windowPickerRow: {
+      marginHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.sm,
     },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   });
