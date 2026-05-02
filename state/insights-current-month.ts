@@ -53,10 +53,12 @@ import {
   getMonthlyOutflowByCategory,
   getMonthlyOutflowByWallet,
   getMonthlyOutflowTotal,
+  getMultiMonthOutflowByWallet,
   getMultiMonthOutflowTrend,
   type CategoryAnomaly,
   type MonthlyOutflowPoint,
   type OutflowBreakdown,
+  type PeriodWalletOutflow,
 } from '@/logic/aggregations';
 
 export interface InsightsWalletRow {
@@ -87,6 +89,15 @@ export interface InsightsCurrentMonthState {
 
   /** 6-month trend, oldest first. Always exactly 6 points. */
   trend: MonthlyOutflowPoint[];
+
+  /**
+   * 6-month trend split per wallet, same period order as `trend`. Drives
+   * the stacked-bars rendering in the Insights chart so each bar shows
+   * segments colored by wallet brand. Each entry's `byWallet` is sparse
+   * (zero-outflow wallets omitted) — the chart iterates the active
+   * wallet list and reads `byWallet.get(walletId) ?? 0`.
+   */
+  trendByWallet: PeriodWalletOutflow[];
 
   /** Anomalous categories (ratio desc). Empty when nothing's unusual. */
   anomalies: CategoryAnomaly[];
@@ -223,6 +234,11 @@ export function useInsightsCurrentMonth(
     return getMultiMonthOutflowTrend(payments, expenses, periods);
   }, [payments, expenses, periods]);
 
+  // 6-month trend split per wallet, for the chart's stacked bars.
+  const trendByWallet = useMemo<PeriodWalletOutflow[]>(() => {
+    return getMultiMonthOutflowByWallet(payments, expenses, periods);
+  }, [payments, expenses, periods]);
+
   // Anomalies — already sorted by ratio desc by the aggregation function.
   const anomalies = useMemo<CategoryAnomaly[]>(() => {
     return getCategoryAnomalies(expenses, currentPeriod, ANOMALY_LOOKBACK_MONTHS);
@@ -237,6 +253,7 @@ export function useInsightsCurrentMonth(
     walletsByOutflow,
     categoriesByOutflow,
     trend,
+    trendByWallet,
     anomalies,
     reload,
   };

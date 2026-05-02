@@ -70,8 +70,17 @@ export default function InsightsScreen() {
     walletsByOutflow,
     categoriesByOutflow,
     trend,
+    trendByWallet,
     anomalies,
   } = useInsightsCurrentMonth(db, today);
+
+  // Wallet list for the chart's stacked bars — uses the by-wallet rows
+  // (active wallets only). The chart accepts archived-only walletIds in
+  // the data via a fallback color, so missing them here is fine.
+  const chartWallets = useMemo(
+    () => walletsByOutflow.map((r) => r.wallet),
+    [walletsByOutflow],
+  );
 
   // Decide whether to render the cards stack or the empty state. The cards
   // hide entirely when there's no current-month activity AND the 6-month
@@ -140,7 +149,10 @@ export default function InsightsScreen() {
               <InsightsEmptyState />
             ) : (
               <>
-                <InsightsTrendChart data={trend} />
+                <InsightsTrendChart
+                  data={trendByWallet}
+                  wallets={chartWallets}
+                />
                 {anomalies.length > 0 ? (
                   <InsightsAnomalyCard
                     entries={anomalyEntries}

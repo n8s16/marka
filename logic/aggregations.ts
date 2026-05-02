@@ -199,6 +199,42 @@ export function getMultiMonthOutflowTrend(
   });
 }
 
+/**
+ * Per-period per-wallet outflow totals. Used by the Insights trend chart's
+ * stacked-bars rendering: each bar shows segments colored by wallet brand.
+ *
+ * Returns one entry per input period in the SAME ORDER as the input. The
+ * `byWallet` map is sparse — wallets with zero outflow in that period are
+ * NOT keyed. Caller (the chart) iterates a known wallet list and reads
+ * `byWallet.get(walletId) ?? 0` to render segments.
+ *
+ * Reuses getMonthlyOutflowByWallet internally and collapses each wallet's
+ * OutflowBreakdown to a single total. Per DATA_MODEL §"Critical rule,"
+ * transfers are excluded.
+ */
+export interface PeriodWalletOutflow {
+  period: string;
+  /** walletId → centavos. Sparse; zero-outflow wallets omitted. */
+  byWallet: Map<string, number>;
+}
+
+export function getMultiMonthOutflowByWallet(
+  payments: BillPayment[],
+  expenses: Expense[],
+  periods: string[],
+): PeriodWalletOutflow[] {
+  return periods.map((period) => {
+    const fullBreakdown = getMonthlyOutflowByWallet(payments, expenses, period);
+    const byWallet = new Map<string, number>();
+    for (const [walletId, breakdown] of fullBreakdown) {
+      if (breakdown.total > 0) {
+        byWallet.set(walletId, breakdown.total);
+      }
+    }
+    return { period, byWallet };
+  });
+}
+
 /** Subtract `n` months from a `YYYY-MM` period string. */
 function shiftPeriod(period: string, deltaMonths: number): string {
   // Pin to the 1st at local midnight; date-fns `addMonths` handles signs and

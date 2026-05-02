@@ -3,6 +3,7 @@ import {
   getMonthlyOutflowByWallet,
   getMonthlyOutflowByCategory,
   getMultiMonthOutflowTrend,
+  getMultiMonthOutflowByWallet,
   getCategoryAnomalies,
   type BillPayment,
   type Expense,
@@ -486,6 +487,68 @@ describe('getMultiMonthOutflowTrend', () => {
       { period: '2026-03', bills: 100000, spending: 7500, total: 107500 },
       { period: '2026-04', bills: 50000, spending: 12500, total: 62500 },
     ]);
+  });
+});
+
+describe('getMultiMonthOutflowByWallet', () => {
+  it('returns an empty array for empty periods', () => {
+    expect(getMultiMonthOutflowByWallet([], [], [])).toEqual([]);
+  });
+
+  it('returns one entry per period in input order with sparse byWallet maps', () => {
+    const payments = [
+      makePayment({ id: 'p1', wallet_id: 'w-maya', amount: 100000, paid_date: '2026-04-15' }),
+      makePayment({ id: 'p2', wallet_id: 'w-gcash', amount: 50000, paid_date: '2026-04-20' }),
+    ];
+    const expenses = [
+      makeExpense({ id: 'e1', wallet_id: 'w-maya', amount: 25000, date: '2026-04-05' }),
+    ];
+    const result = getMultiMonthOutflowByWallet(payments, expenses, ['2026-04']);
+    expect(result).toHaveLength(1);
+    expect(result[0].period).toBe('2026-04');
+    expect(result[0].byWallet.get('w-maya')).toBe(125000); // 100k bills + 25k spending
+    expect(result[0].byWallet.get('w-gcash')).toBe(50000);
+    expect(result[0].byWallet.has('w-unionbank')).toBe(false); // sparse
+  });
+
+  it('emits an empty byWallet map for periods with no activity', () => {
+    const payments = [makePayment({ amount: 100000, paid_date: '2026-04-15' })];
+    const result = getMultiMonthOutflowByWallet(payments, [], ['2026-03', '2026-04', '2026-05']);
+    expect(result.map((p) => p.byWallet.size)).toEqual([0, 1, 0]);
+  });
+
+  it('excludes wallets with zero outflow in a given period', () => {
+    const payments = [
+      makePayment({ id: 'p1', wallet_id: 'w-maya', amount: 100000, paid_date: '2026-03-15' }),
+      makePayment({ id: 'p2', wallet_id: 'w-gcash', amount: 50000, paid_date: '2026-04-15' }),
+    ];
+    const result = getMultiMonthOutflowByWallet(payments, [], ['2026-03', '2026-04']);
+    // March: only Maya. April: only GCash. No bleed-through.
+    expect(Array.from(result[0].byWallet.keys())).toEqual(['w-maya']);
+    expect(Array.from(result[1].byWallet.keys())).toEqual(['w-gcash']);
+  });
+
+  it('preserves input period order', () => {
+    const payments = [
+      makePayment({ id: 'p1', wallet_id: 'w-maya', amount: 1000, paid_date: '2026-02-10' }),
+      makePayment({ id: 'p2', wallet_id: 'w-maya', amount: 2000, paid_date: '2026-03-10' }),
+      makePayment({ id: 'p3', wallet_id: 'w-maya', amount: 3000, paid_date: '2026-04-10' }),
+    ];
+    const result = getMultiMonthOutflowByWallet(payments, [], ['2026-04', '2026-02', '2026-03']);
+    expect(result.map((p) => p.period)).toEqual(['2026-04', '2026-02', '2026-03']);
+    expect(result.map((p) => p.byWallet.get('w-maya'))).toEqual([3000, 1000, 2000]);
+  });
+
+  it('combines bills and expenses per wallet within a period', () => {
+    const payments = [
+      makePayment({ id: 'p1', wallet_id: 'w-maya', amount: 80000, paid_date: '2026-04-15' }),
+    ];
+    const expenses = [
+      makeExpense({ id: 'e1', wallet_id: 'w-maya', amount: 20000, date: '2026-04-05' }),
+      makeExpense({ id: 'e2', wallet_id: 'w-maya', amount: 5000, date: '2026-04-25' }),
+    ];
+    const result = getMultiMonthOutflowByWallet(payments, expenses, ['2026-04']);
+    expect(result[0].byWallet.get('w-maya')).toBe(105000); // 80k + 20k + 5k
   });
 });
 
