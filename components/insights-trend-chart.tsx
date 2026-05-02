@@ -26,8 +26,14 @@
 // is "looks-right-ish" surface — visual verification is the user's
 // responsibility.
 
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 import { format as formatDate, parse as parseDateFns } from 'date-fns';
 
@@ -63,6 +69,12 @@ const BAR_WIDTH_RATIO = 0.55;
 // Tiny stub for non-zero segments that would round to invisible.
 const MIN_SEGMENT_HEIGHT = 1;
 const MIN_VISIBLE_RATIO = 0.015; // < this fraction of max → render as the stub
+// At any window length, slots are sized as if the chart were showing
+// 6 months in the visible container. With 6 or fewer periods the chart
+// fills the container; with 12 or 24 periods the SVG extends past the
+// container and the wrapper ScrollView handles horizontal panning so
+// bars don't get visually cluttered.
+const SLOTS_TO_FIT = 6;
 
 export function InsightsTrendChart({
   data,
@@ -70,6 +82,7 @@ export function InsightsTrendChart({
 }: InsightsTrendChartProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
 
   // Per-period total = sum of byWallet entries. Used to scale heights.
   const totalsAndMax = useMemo(() => {
@@ -146,12 +159,32 @@ export function InsightsTrendChart({
     );
   }
 
+  // Slot sizing: each slot is `containerWidth / SLOTS_TO_FIT` wide so the
+  // visual density at any window length matches the 6-month layout. With
+  // ≤ 6 periods the SVG is narrower than the container; we'd want it to
+  // FILL the container in that case, so size to `data.length` slots
+  // instead. With > 6 periods the SVG extends and the ScrollView pans.
   const innerWidth = width - theme.spacing.sm * 2;
-  const slotWidth = width > 0 ? innerWidth / data.length : 0;
+  const slotsForSlotSizing = Math.min(data.length, SLOTS_TO_FIT);
+  const slotWidth = width > 0 ? innerWidth / slotsForSlotSizing : 0;
   const barWidth = slotWidth * BAR_WIDTH_RATIO;
+  const svgWidth = slotWidth * data.length;
 
   const currentIdx = data.length - 1;
   const currentTotal = totalsAndMax.totals[currentIdx] ?? 0;
+
+  // When the chart is wider than the container, scroll to the end so the
+  // user lands on the current (rightmost) month — same default focus as
+  // the rest of the app's "current month" framing. Re-fires when data
+  // length changes (e.g. user picks a longer window).
+  useEffect(() => {
+    if (svgWidth > innerWidth && scrollRef.current && innerWidth > 0) {
+      // Defer one frame so the ScrollView has its content laid out.
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollToEnd({ animated: false });
+      });
+    }
+  }, [svgWidth, innerWidth]);
 
   return (
     <View
@@ -172,13 +205,21 @@ export function InsightsTrendChart({
       ]}
     >
       {width > 0 ? (
-        <Svg width={innerWidth} height={TOTAL_HEIGHT - theme.spacing.xs}>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={svgWidth > innerWidth}
+          // Disable scroll when content fits — keeps the gesture from
+          // intercepting taps unnecessarily for short windows.
+          scrollEnabled={svgWidth > innerWidth}
+        >
+        <Svg width={svgWidth} height={TOTAL_HEIGHT - theme.spacing.xs}>
           {/* Stacked bars — one Rect per (period, wallet) segment. */}
           {data.map((point, periodIdx) => {
             const periodTotal = totalsAndMax.totals[periodIdx] ?? 0;
             if (periodTotal === 0) return null;
 
-            const slotLeft = innerWidth * (periodIdx / data.length);
+            const slotLeft = slotWidth * periodIdx;
             const x = slotLeft + (slotWidth - barWidth) / 2;
             const isCurrent = periodIdx === currentIdx;
             // Past-month opacity — current bar pops at full opacity.
@@ -280,6 +321,7 @@ export function InsightsTrendChart({
             );
           })}
         </Svg>
+        </ScrollView>
       ) : null}
     </View>
   );
