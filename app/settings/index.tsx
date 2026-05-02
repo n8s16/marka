@@ -28,6 +28,8 @@ interface SettingsRow {
   title: string;
   subtitle: string;
   href: Href | null; // null → Coming soon (disabled).
+  /** Tint the title in `colors.danger` to flag a destructive entry. */
+  destructive?: boolean;
 }
 
 const ROWS: ReadonlyArray<SettingsRow> = [
@@ -66,6 +68,13 @@ const ROWS: ReadonlyArray<SettingsRow> = [
     title: 'Export',
     subtitle: 'Save your data to JSON or CSV files.',
     href: '/settings/export',
+  },
+  {
+    key: 'reset',
+    title: 'Reset',
+    subtitle: 'Wipe all wallets, bills, and history. Cannot be undone.',
+    href: '/settings/reset',
+    destructive: true,
   },
 ];
 
@@ -137,7 +146,9 @@ export default function SettingsHubScreen() {
                         {
                           color: disabled
                             ? theme.colors.textMuted
-                            : theme.colors.text,
+                            : row.destructive
+                              ? theme.colors.danger
+                              : theme.colors.text,
                         },
                       ]}
                     >
