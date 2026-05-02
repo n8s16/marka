@@ -3,17 +3,12 @@
 // Route: `/settings`. Reachable from the Wallets tab "Settings" header link.
 // Per docs/PRD.md §"Supporting screens" — Settings, this is the parent
 // screen for manage-wallets, manage-bills, categories, theme, app lock,
-// notifications, export, and backup status. PR 10a wired Wallets; PR 10b
-// wired Bills and Categories; PR 10c wired Theme; PR 10d wired App lock;
-// PR 10e wires Export. Every row is now interactive — no more "Coming soon."
+// export, and reset.
 //
 // Layout mirrors `app/transfers/index.tsx`: SafeAreaView root, header
 // with Back link + centered title, ScrollView body. No FAB — Settings
-// has no primary creation action.
-//
-// Each category is a tappable row inside a hairline-bordered card. The
-// disabled rows use `Pressable` with `disabled` so VoiceOver announces
-// them as unavailable rather than as silent text.
+// has no primary creation action. Each row is a tappable Pressable
+// inside a hairline-bordered card.
 
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -27,7 +22,7 @@ interface SettingsRow {
   key: string;
   title: string;
   subtitle: string;
-  href: Href | null; // null → Coming soon (disabled).
+  href: Href;
   /** Tint the title in `colors.danger` to flag a destructive entry. */
   destructive?: boolean;
 }
@@ -115,26 +110,19 @@ export default function SettingsHubScreen() {
           <View style={styles.card}>
             {ROWS.map((row, index) => {
               const isLast = index === ROWS.length - 1;
-              const disabled = row.href === null;
               return (
                 <Pressable
                   key={row.key}
-                  onPress={() => {
-                    if (row.href) router.push(row.href);
-                  }}
-                  disabled={disabled}
+                  onPress={() => router.push(row.href)}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled }}
-                  accessibilityLabel={
-                    disabled ? `${row.title}, coming soon` : row.title
-                  }
+                  accessibilityLabel={row.title}
                   style={({ pressed }) => [
                     styles.row,
                     !isLast && {
                       borderBottomWidth: theme.borderWidth.hairline,
                       borderBottomColor: theme.colors.border,
                     },
-                    pressed && !disabled && {
+                    pressed && {
                       backgroundColor: theme.colors.surfaceMuted,
                     },
                   ]}
@@ -144,11 +132,9 @@ export default function SettingsHubScreen() {
                       style={[
                         theme.typography.body.md,
                         {
-                          color: disabled
-                            ? theme.colors.textMuted
-                            : row.destructive
-                              ? theme.colors.danger
-                              : theme.colors.text,
+                          color: row.destructive
+                            ? theme.colors.danger
+                            : theme.colors.text,
                         },
                       ]}
                     >
@@ -163,19 +149,17 @@ export default function SettingsHubScreen() {
                         },
                       ]}
                     >
-                      {disabled ? 'Coming soon' : row.subtitle}
+                      {row.subtitle}
                     </Text>
                   </View>
-                  {!disabled ? (
-                    <Text
-                      style={[
-                        theme.typography.body.sm,
-                        { color: theme.colors.textFaint },
-                      ]}
-                    >
-                      ›
-                    </Text>
-                  ) : null}
+                  <Text
+                    style={[
+                      theme.typography.body.sm,
+                      { color: theme.colors.textFaint },
+                    ]}
+                  >
+                    ›
+                  </Text>
                 </Pressable>
               );
             })}

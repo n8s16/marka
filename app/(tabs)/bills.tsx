@@ -5,7 +5,7 @@
 //   - Upcoming reminder callout: surfaces the soonest active reminder.
 //   - List of bills with paid items struck through, wallet color tint.
 //   - Floating + button (bottom-right) routes to /bills/new (add).
-//   - "Year view" link top-right (stub here; wired in build step 7).
+//   - "Year view" link top-right routes to /year-grid.
 //
 // Data fetching and derivation live in `state/bills-current-month.ts` —
 // this file is layout-only.

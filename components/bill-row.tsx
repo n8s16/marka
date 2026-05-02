@@ -9,8 +9,8 @@
 //     surface "this is late."
 //   - Upcoming: full opacity; if reminderActive, render a small sub-label
 //     "Reminder in N days."
-//   - Future / not_due: deferred — the parent screen filters `not_due` rows
-//     and only renders current-period futures (yet to come this build).
+//   - Future / not_due: the parent screen filters `not_due` rows out before
+//     this component sees them; only current-period futures render here.
 //
 // Tap targets:
 //   - Tap the row when status is 'paid' → payment details sheet at

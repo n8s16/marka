@@ -1,10 +1,9 @@
 // Inline reminder callout shown above the Bills list when at least one bill
 // has an active reminder for its current period.
 //
-// Per docs/PRD.md the callout is dismissable in one tap and never blocking;
-// dismissal is deferred to a later step (state plumbing for "soft warnings"
-// will land alongside the 30-day-old date warning). For now it's purely
-// informational — the parent screen decides whether to render it at all.
+// Purely informational in v1: the parent screen decides whether to render
+// it at all, so the callout itself doesn't expose a dismiss affordance.
+// The PRD describes a one-tap dismissal; that state plumbing is not in v1.
 
 import { Text, View } from 'react-native';
 

@@ -8,7 +8,7 @@
 // show-balance toggle. The `icon` field stays null in v1 — the data model
 // allows it but no icon library is wired up.
 //
-// Show-balance toggle (PRD §"Behavior decisions" → step 11):
+// Show-balance toggle (PRD §"Behavior decisions"):
 //   - Off by default, per PRD §"Outflow-primary, balance-optional".
 //   - Flipping ON reveals a "Current balance" CurrencyInput. We
 //     back-calculate `opening_balance` via `computeOpeningBalance` from the

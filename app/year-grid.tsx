@@ -81,7 +81,7 @@ export default function YearGridScreen() {
   const router = useRouter();
 
   // Year defaults to the current calendar year. Year picker (prev/next) is
-  // a polish item per the brief — out of scope for this build.
+  // a polish item per the brief — out of scope for v1.
   const year = useMemo(() => new Date().getFullYear(), []);
   const periods = useMemo(() => buildPeriods(year), [year]);
 

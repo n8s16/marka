@@ -4,8 +4,7 @@
 // Per docs/PRD.md §"Supporting screens" — Manage wallets, this screen
 // lists all wallets (active + archived) with edit-on-tap and an FAB to
 // add a new wallet. The show-balance toggle and opening-balance flow
-// described in the PRD line for this screen are intentionally deferred
-// to step 11 (Optional balance toggle on wallets).
+// live on the per-wallet edit screen (`./[id].tsx`).
 //
 // Layout mirrors `app/transfers/index.tsx`: SafeAreaView root, header
 // with Back link + centered title, ScrollView body, FAB at bottom-right.
