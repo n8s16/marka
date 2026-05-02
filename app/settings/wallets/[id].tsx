@@ -4,10 +4,24 @@
 // The literal `"new"` is the add-mode sentinel — same pattern as
 // `/bills/new` and `/transfers/new`. Both routes render through this file.
 //
-// PRD §"Supporting screens" — Manage wallets: name, type, color. The
-// `icon` field stays null in v1 — the data model allows it but no icon
-// library is wired up. The show-balance toggle and opening-balance flow
-// described in the same PRD line are intentionally deferred to step 11.
+// PRD §"Supporting screens" — Manage wallets: name, type, color,
+// show-balance toggle. The `icon` field stays null in v1 — the data model
+// allows it but no icon library is wired up.
+//
+// Show-balance toggle (PRD §"Behavior decisions" → step 11):
+//   - Off by default, per PRD §"Outflow-primary, balance-optional".
+//   - Flipping ON reveals a "Current balance" CurrencyInput. We
+//     back-calculate `opening_balance` via `computeOpeningBalance` from the
+//     reported current balance and ALL recorded events for the wallet
+//     (total-time, NOT month-windowed — see logic/wallet-balance.ts).
+//   - Flipping OFF leaves `opening_balance` as-is in the DB. If the user
+//     re-enables, we re-prompt and recompute fresh.
+//   - The current-balance prompt is ALWAYS visible when the toggle is ON.
+//     If the wallet already has an opening_balance recorded, we pre-fill
+//     the input with the COMPUTED current balance (opening + inflows −
+//     outflows) so the user can see what's currently tracked. Saving
+//     without changing the value is idempotent — same value in, same
+//     opening_balance out. Changing the value recalibrates.
 //
 // Hard delete is intentionally NOT exposed. Per docs/DATA_MODEL.md
 // "Archive, don't delete." Archive (or unarchive when already archived)
@@ -26,6 +40,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -33,9 +48,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ColorPicker, isValidHexColor } from '@/components/color-picker';
+import { CurrencyInput } from '@/components/currency-input';
 import { SegmentedChips } from '@/components/segmented-chips';
 import { TextField } from '@/components/text-field';
 import { useDb } from '@/db/client';
+import { listBillPayments } from '@/db/queries/bill-payments';
+import { listExpenses } from '@/db/queries/expenses';
+import { listTransfers } from '@/db/queries/transfers';
 import {
   archiveWallet,
   createWallet,
@@ -45,6 +64,7 @@ import {
   type Wallet,
   type WalletInsert,
 } from '@/db/queries/wallets';
+import { computeOpeningBalance, getWalletBalance } from '@/logic/wallet-balance';
 import { useTheme } from '@/state/theme';
 import type { Theme } from '@/styles/theme';
 import { walletBrand } from '@/styles/tokens';
@@ -67,12 +87,18 @@ interface FormState {
   name: string;
   type: WalletType;
   color: string;
+  showBalance: boolean;
+  // Centavo value typed by the user as their *current* balance. We
+  // back-calculate `opening_balance` from this on save. `null` while empty
+  // or while the input is invalid — the parser owns invalid-state messaging.
+  currentBalance: number | null;
 }
 
 interface FieldErrors {
   name?: string;
   type?: string;
   color?: string;
+  currentBalance?: string;
 }
 
 function emptyForm(): FormState {
@@ -80,6 +106,8 @@ function emptyForm(): FormState {
     name: '',
     type: 'e_wallet',
     color: DEFAULT_NEW_COLOR,
+    showBalance: false,
+    currentBalance: null,
   };
 }
 
@@ -88,48 +116,12 @@ function walletToForm(w: Wallet): FormState {
     name: w.name,
     type: w.type,
     color: w.color,
+    showBalance: w.show_balance,
+    // The events-driven effect below pre-fills this with the computed
+    // current balance once events load. We start at null to mark the
+    // pre-fill as not-yet-loaded.
+    currentBalance: null,
   };
-}
-
-function validate(form: FormState): {
-  errors: FieldErrors;
-  payload: WalletInsert | null;
-} {
-  const errors: FieldErrors = {};
-
-  const name = form.name.trim();
-  if (!name) errors.name = 'Name is required.';
-
-  if (
-    form.type !== 'e_wallet' &&
-    form.type !== 'bank' &&
-    form.type !== 'cash'
-  ) {
-    errors.type = 'Pick a wallet type.';
-  }
-
-  if (!isValidHexColor(form.color)) {
-    errors.color = 'Pick a color.';
-  }
-
-  if (Object.keys(errors).length > 0) {
-    return { errors, payload: null };
-  }
-
-  // All required fields are valid here.
-  // `icon`, `show_balance`, `opening_balance`, `archived` left to defaults
-  // for create. For update we explicitly pass only the editable fields so
-  // existing archived/show_balance state is preserved.
-  const payload: WalletInsert = {
-    name,
-    type: form.type,
-    color: form.color,
-    icon: null,
-    show_balance: false,
-    opening_balance: null,
-    archived: false,
-  };
-  return { errors, payload };
 }
 
 export default function WalletEditScreen() {
@@ -148,6 +140,14 @@ export default function WalletEditScreen() {
   const [saving, setSaving] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [existing, setExisting] = useState<Wallet | null>(null);
+  // Computed current balance from the wallet's stored opening_balance plus
+  // total-time events. Used to pre-fill the input when the user opens a
+  // wallet that already has show_balance ON, and to seed the input on
+  // toggle-ON within a session. `null` until events load or when the wallet
+  // has no opening_balance recorded.
+  const [computedCurrentBalance, setComputedCurrentBalance] = useState<
+    number | null
+  >(null);
 
   // Load existing wallet for edit mode.
   useEffect(() => {
@@ -175,6 +175,58 @@ export default function WalletEditScreen() {
     };
   }, [db, id, isNew]);
 
+  // Once the wallet loads, fetch its total-time events and compute the
+  // current balance. We compute regardless of `show_balance` so the value
+  // is ready to seed the input if the user toggles ON in this session.
+  // Pass `show_balance: true` into getWalletBalance so it returns a value
+  // even when the wallet has the toggle off — we only need opening_balance
+  // to be non-null. When opening_balance is null, computed stays null.
+  useEffect(() => {
+    if (isNew) return;
+    if (!existing) return;
+    if (existing.opening_balance === null) {
+      setComputedCurrentBalance(null);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      listBillPayments(db, { walletId: id }),
+      listExpenses(db, { walletId: id }),
+      listTransfers(db, { walletId: id }),
+    ])
+      .then(([payments, expenses, transfers]) => {
+        if (cancelled) return;
+        const computed = getWalletBalance(
+          {
+            id: existing.id,
+            show_balance: true,
+            opening_balance: existing.opening_balance,
+          },
+          payments,
+          expenses,
+          transfers,
+        );
+        setComputedCurrentBalance(computed);
+        // Pre-fill the form's currentBalance only when the wallet was
+        // loaded with show_balance: true. If the wallet was OFF, the user
+        // explicitly opted out and the input stays empty until they
+        // toggle ON in this session — at which point the toggle handler
+        // seeds it from `computedCurrentBalance`.
+        if (existing.show_balance && computed !== null) {
+          setForm((f) =>
+            f.currentBalance === null ? { ...f, currentBalance: computed } : f,
+          );
+        }
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setSubmitError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [db, id, isNew, existing]);
+
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
     if (errors[key as keyof FieldErrors]) {
@@ -182,24 +234,113 @@ export default function WalletEditScreen() {
     }
   }
 
+  function handleToggleShowBalance(next: boolean) {
+    setForm((f) => ({
+      ...f,
+      showBalance: next,
+      // Turning ON: seed the input with the computed current balance if
+      // the wallet already has events tracked. Falls back to the field's
+      // existing value (which may be a number the user just typed before
+      // toggling OFF→ON, or null for a brand-new toggle ON).
+      // Turning OFF: clear so re-enabling starts from a known state.
+      currentBalance: next ? (computedCurrentBalance ?? f.currentBalance) : null,
+    }));
+    if (errors.currentBalance) {
+      setErrors((e) => ({ ...e, currentBalance: undefined }));
+    }
+  }
+
   async function handleSave() {
     setSubmitError(null);
-    const { errors: nextErrors, payload } = validate(form);
+
+    // ---- Validation ----
+    const nextErrors: FieldErrors = {};
+    const trimmedName = form.name.trim();
+    if (!trimmedName) nextErrors.name = 'Name is required.';
+    if (
+      form.type !== 'e_wallet' &&
+      form.type !== 'bank' &&
+      form.type !== 'cash'
+    ) {
+      nextErrors.type = 'Pick a wallet type.';
+    }
+    if (!isValidHexColor(form.color)) {
+      nextErrors.color = 'Pick a color.';
+    }
+    if (form.showBalance) {
+      if (form.currentBalance === null) {
+        nextErrors.currentBalance =
+          'Enter the current balance in this wallet.';
+      } else if (form.currentBalance < 0) {
+        nextErrors.currentBalance = 'Negative amounts are not allowed.';
+      }
+    }
+
     setErrors(nextErrors);
-    if (!payload) return;
+    if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
     try {
       if (isNew) {
+        // For a new wallet there are no events yet, so computeOpeningBalance
+        // resolves to currentBalance directly.
+        const opening_balance =
+          form.showBalance && form.currentBalance !== null
+            ? computeOpeningBalance(
+                /* unused walletId pre-creation */ '',
+                form.currentBalance,
+                [],
+                [],
+                [],
+              )
+            : null;
+        const payload: WalletInsert = {
+          name: trimmedName,
+          type: form.type,
+          color: form.color,
+          icon: null,
+          show_balance: form.showBalance,
+          opening_balance,
+          archived: false,
+        };
         await createWallet(db, payload);
       } else {
-        // For edit, only patch the editable fields. Preserves archived,
-        // show_balance, opening_balance state set elsewhere.
-        await updateWallet(db, id, {
-          name: payload.name,
-          type: payload.type,
-          color: payload.color,
-        });
+        // Patch only editable fields. Preserves archived state.
+        const patch: Parameters<typeof updateWallet>[2] = {
+          name: trimmedName,
+          type: form.type,
+          color: form.color,
+          show_balance: form.showBalance,
+        };
+
+        if (form.showBalance && form.currentBalance !== null) {
+          // Always recompute opening_balance from the (possibly pre-filled)
+          // current balance. Idempotent when the user didn't change the
+          // pre-filled value:
+          //   computed_balance = opening - outflows + inflows
+          //   new_opening      = computed_balance + outflows - inflows
+          //                    = opening
+          // CRITICAL: pass ALL events for this wallet (no date filter) — see
+          // the total-time contract in logic/wallet-balance.ts. A month
+          // window here would corrupt the round-trip silently.
+          const [payments, expenses, transfers] = await Promise.all([
+            listBillPayments(db, { walletId: id }),
+            listExpenses(db, { walletId: id }),
+            listTransfers(db, { walletId: id }),
+          ]);
+          patch.opening_balance = computeOpeningBalance(
+            id,
+            form.currentBalance,
+            payments,
+            expenses,
+            transfers,
+          );
+        }
+        // When show_balance flips OFF: per spec, leave opening_balance as-is
+        // so re-enabling with a fresh prompt is the only way it gets
+        // recomputed. The patch intentionally omits opening_balance.
+
+        await updateWallet(db, id, patch);
       }
       router.back();
     } catch (err) {
@@ -286,6 +427,12 @@ export default function WalletEditScreen() {
 
   const isArchived = !!existing?.archived;
 
+  // The current-balance prompt is always visible when the toggle is ON.
+  // For wallets that already have show_balance + opening_balance recorded,
+  // the field is pre-filled with the computed current balance so the user
+  // can see what's tracked. Saving without changing it is idempotent.
+  const showBalancePrompt = form.showBalance;
+
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <View style={styles.header}>
@@ -371,6 +518,64 @@ export default function WalletEditScreen() {
               onChange={(v) => set('color', v)}
               error={errors.color ?? null}
             />
+          </View>
+
+          {/* Show-balance toggle. Off by default per PRD §"Outflow-primary,
+              balance-optional". When flipped ON, the current-balance prompt
+              appears below; we use that to back-calculate opening_balance. */}
+          <View style={styles.field}>
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelWrap}>
+                <Text
+                  style={[
+                    theme.typography.body.md,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  Show running balance
+                </Text>
+                <Text
+                  style={[
+                    theme.typography.label.sm,
+                    {
+                      color: theme.colors.textMuted,
+                      marginTop: theme.spacing.xs,
+                    },
+                  ]}
+                >
+                  Off by default. When on, this wallet shows a balance line
+                  on the Wallets tab.
+                </Text>
+              </View>
+              <Switch
+                value={form.showBalance}
+                onValueChange={handleToggleShowBalance}
+                accessibilityLabel="Show running balance"
+              />
+            </View>
+
+            {showBalancePrompt ? (
+              <View style={styles.promptWrap}>
+                <CurrencyInput
+                  label="Current balance"
+                  value={form.currentBalance}
+                  onChange={(v) => set('currentBalance', v)}
+                  placeholder="0.00"
+                  error={errors.currentBalance ?? null}
+                />
+                <Text
+                  style={[
+                    theme.typography.label.sm,
+                    styles.promptHelper,
+                    { color: theme.colors.textMuted },
+                  ]}
+                >
+                  Tell us what this wallet currently holds. We&rsquo;ll
+                  back-calculate the opening balance from your recorded
+                  transactions.
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {!isNew ? (
@@ -461,6 +666,21 @@ function makeStyles(theme: Theme) {
       borderRadius: theme.radii.sm,
       paddingVertical: theme.spacing.md,
       alignItems: 'center',
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    toggleLabelWrap: {
+      flex: 1,
+      marginRight: theme.spacing.md,
+    },
+    promptWrap: {
+      marginTop: theme.spacing.md,
+    },
+    promptHelper: {
+      marginTop: theme.spacing.xs,
     },
   });
 }

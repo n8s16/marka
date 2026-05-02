@@ -178,6 +178,7 @@ export default function WalletsScreen() {
                     key={entry.wallet.id}
                     wallet={entry.wallet}
                     outflow={entry.outflow}
+                    balance={entry.balance}
                   />
                 ))}
               </View>
