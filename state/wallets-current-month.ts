@@ -1,4 +1,6 @@
-// Hook: derive the current-month outflow per wallet for the Wallets tab.
+// Hook: derive the current-month outflow per wallet for the Wallets tab,
+// plus per-wallet running balance for wallets that have `show_balance`
+// enabled.
 //
 // The Wallets tab is "outflow-primary" per docs/PRD.md §"Core design
 // principles": it answers "what went out this calendar month, per wallet?"
@@ -11,10 +13,25 @@
 //     period."
 //   - Expenses are filtered by `date`.
 //
+// Balance contract (per logic/wallet-balance.ts and DATA_MODEL.md §"Wallet
+// balance"): `getWalletBalance` is total-time, NOT month-windowed. It
+// requires ALL recorded events for the wallet (and `opening_balance` set on
+// the wallet row). Mixing a month-window into the balance computation would
+// silently produce wrong numbers and corrupt the round-trip with
+// `computeOpeningBalance`. To honour that, this hook fetches event tables
+// WITHOUT a date filter — total-time — and then derives the month-windowed
+// outflow numbers in-memory via getMonthlyOutflow*. Aggregation helpers
+// already filter by period prefix on date strings, so passing total-time
+// rows is correct. At v1's data scale (hundreds of rows) this is cheap and
+// keeps the hook straightforward — one query per table instead of two.
+//
 // Returned shape:
 //   - walletsWithOutflow: every active wallet, sorted by total outflow desc
 //     (ties broken by name asc). Wallets with zero outflow appear at the
-//     bottom — the UI greys them out per the Wallets-tab brief.
+//     bottom — the UI greys them out per the Wallets-tab brief. Each entry
+//     also carries a `balance: number | null` field — null when the wallet
+//     has `show_balance` off (or no recorded opening balance), otherwise a
+//     centavo total per `getWalletBalance`.
 //   - totalBreakdown: combined bills/spending/total across all wallets.
 //   - loading / error / reload: standard async-state plumbing.
 //
@@ -24,23 +41,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
-import { endOfMonth, format as formatDate, startOfMonth } from 'date-fns';
+import { format as formatDate } from 'date-fns';
 
 import {
   listBillPayments,
   type BillPayment,
 } from '@/db/queries/bill-payments';
 import { listExpenses, type Expense } from '@/db/queries/expenses';
+import { listTransfers, type Transfer } from '@/db/queries/transfers';
 import { listWallets, type Wallet } from '@/db/queries/wallets';
 import {
   getMonthlyOutflowByWallet,
   getMonthlyOutflowTotal,
   type OutflowBreakdown,
 } from '@/logic/aggregations';
+import { getWalletBalance } from '@/logic/wallet-balance';
 
 export interface WalletOutflowEntry {
   wallet: Wallet;
   outflow: OutflowBreakdown;
+  /**
+   * Per-wallet running balance in centavos. `null` when the wallet has
+   * `show_balance: false` or no `opening_balance` recorded — the UI hides
+   * the line entirely in that case.
+   */
+  balance: number | null;
 }
 
 export interface WalletsCurrentMonthState {
@@ -58,47 +83,43 @@ export function useWalletsCurrentMonth(
   today: Date,
 ): WalletsCurrentMonthState {
   const [wallets, setWallets] = useState<Wallet[] | null>(null);
+  // Total-time event lists. The aggregation helpers filter by period prefix
+  // on the date strings, so we can keep all rows here without windowing.
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Period (`YYYY-MM`) and the month boundary dates derived from `today`.
-  // Memoize so the reload callback's identity only changes when `today` changes.
-  const { period, dateFrom, dateTo } = useMemo(() => {
-    const p = formatDate(today, 'yyyy-MM');
-    const from = formatDate(startOfMonth(today), 'yyyy-MM-dd');
-    const to = formatDate(endOfMonth(today), 'yyyy-MM-dd');
-    return { period: p, dateFrom: from, dateTo: to };
-  }, [today]);
+  // Period (`YYYY-MM`) derived from `today`. Memoize so the reload callback's
+  // identity only changes when `today` changes.
+  const period = useMemo(() => formatDate(today, 'yyyy-MM'), [today]);
 
   const reload = useCallback(async () => {
     try {
-      const [walletsRes, paymentsRes, expensesRes] = await Promise.all([
-        // Active wallets only — archived wallets don't appear on the Wallets
-        // tab. Historical references on payments/expenses still resolve via
-        // the per-wallet outflow map (which is keyed by wallet_id).
-        listWallets(db, { includeArchived: false }),
-        listBillPayments(db, {
-          paidDateFrom: dateFrom,
-          paidDateTo: dateTo,
-        }),
-        listExpenses(db, {
-          dateFrom,
-          dateTo,
-        }),
-      ]);
+      const [walletsRes, paymentsRes, expensesRes, transfersRes] =
+        await Promise.all([
+          // Active wallets only — archived wallets don't appear on the Wallets
+          // tab. Historical references on payments/expenses still resolve via
+          // the per-wallet outflow map (which is keyed by wallet_id).
+          listWallets(db, { includeArchived: false }),
+          // Total-time fetch — required for the balance computation.
+          listBillPayments(db),
+          listExpenses(db),
+          listTransfers(db),
+        ]);
 
       setWallets(walletsRes);
       setPayments(paymentsRes);
       setExpenses(expensesRes);
+      setTransfers(transfersRes);
       setError(null);
     } catch (err) {
       setError(err as Error);
     } finally {
       setLoading(false);
     }
-  }, [db, dateFrom, dateTo]);
+  }, [db]);
 
   useEffect(() => {
     void reload();
@@ -124,6 +145,9 @@ export function useWalletsCurrentMonth(
     const entries = wallets.map<WalletOutflowEntry>((w) => ({
       wallet: w,
       outflow: map.get(w.id) ?? ZERO,
+      // getWalletBalance returns null when show_balance is off or
+      // opening_balance is null — exactly the "hide the line" signal.
+      balance: getWalletBalance(w, payments, expenses, transfers),
     }));
 
     // Sort by outflow.total desc, ties broken by name asc. This bubbles the
@@ -137,7 +161,7 @@ export function useWalletsCurrentMonth(
     });
 
     return entries;
-  }, [wallets, payments, expenses, period]);
+  }, [wallets, payments, expenses, transfers, period]);
 
   return {
     loading,

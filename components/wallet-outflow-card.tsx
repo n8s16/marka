@@ -10,6 +10,12 @@
 //     zero outflow, the amount renders in `theme.colors.textMuted` (greyed).
 //   - The bills/spending split sub-text only renders when total > 0 — keeps
 //     zero-outflow rows clean.
+//   - Optional running balance sub-line — shown ONLY when `balance` is
+//     non-null (i.e. the user has opted in via `show_balance` for this
+//     wallet). Renders in the warning color when negative to surface
+//     "you've spent more than this wallet held at opening." Hidden entirely
+//     when balance is null so wallets that never opt in look exactly the
+//     same as before.
 //
 // No tap target in v1 — read-only card. A future per-wallet detail screen
 // would wire it; we don't add a route preemptively.
@@ -25,6 +31,13 @@ import { accentColorFor } from '@/utils/wallet-color';
 export interface WalletOutflowCardProps {
   wallet: Wallet;
   outflow: OutflowBreakdown;
+  /**
+   * Running balance in centavos. `null` when the wallet has `show_balance`
+   * off or no `opening_balance` recorded — the line is hidden entirely.
+   * Omitting the prop is treated as `null` so callers (e.g. Insights tab)
+   * that don't surface balances don't need to thread the prop through.
+   */
+  balance?: number | null;
 }
 
 // Friendlier label for the wallet's type. The DB stores `e_wallet`, `bank`,
@@ -43,12 +56,17 @@ function walletTypeLabel(type: Wallet['type']): string {
 export function WalletOutflowCard({
   wallet,
   outflow,
+  balance = null,
 }: WalletOutflowCardProps) {
   const theme = useTheme();
   const accent = accentColorFor(wallet);
   const isZero = outflow.total === 0;
 
   const amountColor = isZero ? theme.colors.textMuted : theme.colors.text;
+  const balanceColor =
+    balance !== null && balance < 0
+      ? theme.colors.warning
+      : theme.colors.textMuted;
 
   return (
     <View
@@ -105,6 +123,18 @@ export function WalletOutflowCard({
           >
             Bills {formatCurrency(outflow.bills)} · Spending{' '}
             {formatCurrency(outflow.spending)}
+          </Text>
+        ) : null}
+        {balance !== null ? (
+          <Text
+            style={[
+              theme.typography.label.sm,
+              { color: balanceColor, marginTop: 2 },
+            ]}
+            numberOfLines={1}
+            accessibilityLabel={`Balance ${formatCurrency(balance)}`}
+          >
+            Balance {formatCurrency(balance)}
           </Text>
         ) : null}
       </View>
