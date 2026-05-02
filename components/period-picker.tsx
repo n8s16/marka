@@ -5,12 +5,12 @@
 // due-month [...]; the user can change it via a dropdown showing nearby
 // due-periods." This component renders that dropdown.
 //
-// Window sizing per cadence — we want enough context without overwhelming
-// the list (the agent's call per the brief, documented here):
-//   - Monthly (step 1): 6 months back, 6 months forward → ~12 candidates.
-//   - Quarterly (step 3): 12 months back, 12 months forward → ~8 candidates.
-//   - Yearly (step 12): 24 months back, 24 months forward → ~4–5 candidates.
-//   - Custom (step n): n*4 back, n*4 forward → ~8 candidates.
+// Window sizing per cadence ("stride" = interval_months) — we want enough
+// context without overwhelming the list:
+//   - Monthly  (stride = 1):  6 months back, 6 months forward → ~12 candidates.
+//   - Quarterly (stride = 3): 12 months back, 12 months forward → ~8 candidates.
+//   - Yearly   (stride = 12): 24 months back, 24 months forward → ~4–5 candidates.
+//   - Custom   (stride = n):  n*4 back, n*4 forward → ~8 candidates.
 //
 // A "Suggested" tag marks the smart-default candidate; a "Paid" tag marks
 // periods that already have a payment. The picker still renders paid

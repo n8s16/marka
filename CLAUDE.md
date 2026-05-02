@@ -136,21 +136,28 @@ The full system prompts live in `.claude/agents/<n>.md`. Each enforces strong st
 | "Mark-as-paid isn't saving the wallet" | `data-modeler` (verify schema) → `react-native-developer` (form wiring) | `qa-tester` for regression test |
 | "How should X work?" (not in PRD) | escalate to user | — |
 
-## Build order
+## Features delivered
 
-The user wants daily-usable as fast as possible. Don't try to ship all screens at once.
+v1 is shipped. Treat this list as the canonical "what exists." Anything not
+on it isn't in the app — do not assume a feature is present because the PRD
+mentions it; check the codebase.
 
-1. **Data layer** — schema, migrations, basic CRUD via typed queries. No UI yet. (`data-modeler`)
-2. **Bills tab + Mark-as-paid + Add bill** — the minimum end-to-end loop. After this, the user can replace the bills layer of their spreadsheet. (`data-modeler` → `business-logic-developer` for status/forecasts → `react-native-developer` for UI)
-3. **Wallets tab** (outflow only, no balance toggle) — visibility into per-wallet outflow.
-4. **Spending tab + quick-add** — the one-off log.
-5. **Onboarding** — only after the rest is real.
-6. **Insights tab** — aggregations and trends.
-7. **Year grid** — preserves spreadsheet view.
-8. **Settings polish** — manage wallets/bills/categories, theme picker, export, app lock.
-9. **Optional balance toggle** — last, once everything else is solid.
+- [x] Data layer — Drizzle schema, migrations, typed CRUD per entity
+- [x] Bills tab — current-month list with strikethrough-when-paid, summary card, reminder callout
+- [x] Mark-as-paid + payment-details sheets (separate flows for paid vs unpaid taps)
+- [x] Add / edit bill — full form: cadence (monthly/quarterly/yearly/custom), due-day, default wallet, reminders, auto-forecast
+- [x] Wallets tab — per-wallet outflow card + optional running balance line
+- [x] Spending tab + quick-add expense
+- [x] Transfers — record screen, full history screen
+- [x] Onboarding (first run) — pick wallets, add first bill (skippable)
+- [x] Insights tab — bills/spending split, by-wallet, by-category, anomaly callouts, stacked-bar trend chart with 3M / 6M / 12M / 24M window
+- [x] Year grid — bills × months matrix, wallet-tinted paid cells
+- [x] Settings — manage wallets, manage bills, manage categories, theme (Light / Dark / System), app lock (biometric), export (JSON + zipped CSV), reset
+- [x] Show-balance toggle — per wallet, with current-balance back-calculation
 
-After step 2, the user installs the app and starts using it daily. That's the milestone.
+When the user asks for new work, default to: read the relevant PRD section,
+check the existing implementation, then ask clarifying questions only if the
+behavior they want isn't already specified.
 
 ## Workflow notes
 

@@ -36,8 +36,6 @@ export const STARTER_CATEGORIES = [
   'Misc',
 ] as const;
 
-export type StarterCategoryName = (typeof STARTER_CATEGORIES)[number];
-
 // Permissive DB type so this works for both sync (`drizzle/expo`) and async
 // (`drizzle/better-sqlite3` in tests) databases without forcing the caller to
 // thread schema generics. Acceptable here because the helper only uses the
@@ -77,5 +75,3 @@ export const STARTER_WALLETS = [
   color: string;
   type: 'e_wallet' | 'bank' | 'cash';
 }>;
-
-export type StarterWalletName = (typeof STARTER_WALLETS)[number]['name'];

@@ -1,4 +1,4 @@
-// Tap-to-edit date / period / time inputs.
+// Tap-to-edit date and time inputs.
 //
 // Uses @react-native-community/datetimepicker (pinned 8.4.4 — Expo SDK 54
 // compatible). The picker behaves very differently per platform; we honor
@@ -13,12 +13,12 @@
 //     spinning commits each change, Done dismisses.
 //
 // All wire-protocol values are stable strings: YYYY-MM-DD for dates,
-// YYYY-MM for periods, HH:mm 24h for times. date-fns parses/formats both
-// directions.
+// HH:mm 24h for times. date-fns parses/formats both directions.
+//
+// Period (YYYY-MM) selection lives in `period-picker.tsx`, not here.
 
 import { useMemo, useState } from 'react';
 import {
-  FlatList,
   Modal,
   Platform,
   Pressable,
@@ -186,224 +186,6 @@ export function DateInput({
   );
 }
 
-// ─── Period input (YYYY-MM) ──────────────────────────────────────────────────
-//
-// Used for `start_period` ("First due month") on the bill form. Unlike date
-// and time, the data model carries no day component for periods — they're
-// strictly `YYYY-MM`. Using `<DateTimePicker>` here would show a day field
-// that the user thinks matters but we silently drop in `onChange`. That
-// surfaced as a real source of confusion during testing: users entered Due
-// Day separately, then saw a day field again here and wondered which one
-// won.
-//
-// Solution: a custom modal with a scrollable list of months. No day field
-// exposed at all. Cross-platform (no native picker quirks). The list spans
-// 24 months back and 24 months forward from today; that's enough for both
-// "I'm setting up a bill that started a year ago" backfilling and "this
-// bill starts in a few months" planning. The currently selected month, if
-// outside that window, is appended so it remains visible.
-
-const PERIOD_WINDOW_MONTHS_BACK = 24;
-const PERIOD_WINDOW_MONTHS_FORWARD = 24;
-const PERIOD_ITEM_HEIGHT = 48;
-
-export interface PeriodInputProps {
-  /** YYYY-MM. */
-  value: string;
-  onChange: (next: string) => void;
-  label?: string;
-  error?: string | null;
-  disabled?: boolean;
-  helper?: string;
-}
-
-export function PeriodInput({
-  value,
-  onChange,
-  label,
-  error,
-  disabled,
-  helper,
-}: PeriodInputProps) {
-  const theme = useTheme();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
-  const [open, setOpen] = useState(false);
-
-  const display = (() => {
-    const parsed = parseSafePeriod(value);
-    if (!parsed) return value || '—';
-    return formatDateFns(parsed, 'MMMM yyyy');
-  })();
-
-  // Build a window of YYYY-MM strings around today. Pinned to mount so the
-  // list doesn't shift while the user scrolls.
-  const months = useMemo(() => {
-    const today = new Date();
-    const result: string[] = [];
-    for (
-      let i = -PERIOD_WINDOW_MONTHS_BACK;
-      i <= PERIOD_WINDOW_MONTHS_FORWARD;
-      i++
-    ) {
-      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-      result.push(formatDateFns(d, 'yyyy-MM'));
-    }
-    // Make sure the currently selected value is reachable, even if it's
-    // outside the window (e.g. a backfilled bill from 5 years ago).
-    if (value && /^\d{4}-\d{2}$/.test(value) && !result.includes(value)) {
-      result.push(value);
-      result.sort((a, b) => a.localeCompare(b));
-    }
-    return result;
-  }, [value]);
-
-  // Index of the selected value, used to scroll the list into view on open.
-  const initialIndex = useMemo(() => {
-    const i = months.indexOf(value);
-    return i >= 0 ? i : 0;
-  }, [months, value]);
-
-  return (
-    <View>
-      {label ? (
-        <Text style={[theme.typography.label.md, styles.label]}>{label}</Text>
-      ) : null}
-      <Pressable
-        onPress={() => !disabled && setOpen(true)}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityLabel={label ? `${label}: ${display}` : display}
-        style={[
-          styles.field,
-          {
-            borderColor: error ? theme.colors.danger : theme.colors.border,
-            opacity: disabled ? theme.opacity.disabled : 1,
-          },
-        ]}
-      >
-        <Text style={[theme.typography.body.md, { color: theme.colors.text }]}>
-          {display}
-        </Text>
-      </Pressable>
-
-      <Modal
-        visible={open}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-      >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable
-            // Inner Pressable swallows backdrop taps so list scrolling
-            // doesn't dismiss.
-            onPress={(e) => e.stopPropagation()}
-            style={[styles.sheet, { backgroundColor: theme.colors.surface }]}
-          >
-            <Text
-              style={[
-                theme.typography.title.sm,
-                {
-                  color: theme.colors.text,
-                  marginBottom: theme.spacing.md,
-                },
-              ]}
-            >
-              {label ?? 'Select month'}
-            </Text>
-            <FlatList
-              data={months}
-              keyExtractor={(p) => p}
-              keyboardShouldPersistTaps="handled"
-              initialScrollIndex={initialIndex}
-              getItemLayout={(_, index) => ({
-                length: PERIOD_ITEM_HEIGHT,
-                offset: PERIOD_ITEM_HEIGHT * index,
-                index,
-              })}
-              renderItem={({ item }) => {
-                const isSelected = item === value;
-                return (
-                  <Pressable
-                    onPress={() => {
-                      onChange(item);
-                      setOpen(false);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    style={({ pressed }) => [
-                      styles.monthItem,
-                      {
-                        backgroundColor: pressed
-                          ? theme.colors.surfaceMuted
-                          : isSelected
-                            ? theme.colors.surfaceMuted
-                            : 'transparent',
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        theme.typography.body.md,
-                        {
-                          color: theme.colors.text,
-                          fontWeight: isSelected
-                            ? theme.typography.weights.medium
-                            : theme.typography.weights.regular,
-                        },
-                      ]}
-                    >
-                      {formatDateFns(parseISO(`${item}-01`), 'MMMM yyyy')}
-                    </Text>
-                  </Pressable>
-                );
-              }}
-            />
-            <Pressable
-              onPress={() => setOpen(false)}
-              hitSlop={8}
-              style={styles.cancelRow}
-              accessibilityRole="button"
-            >
-              <Text
-                style={[
-                  theme.typography.body.sm,
-                  { color: theme.colors.accent },
-                ]}
-              >
-                Cancel
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {helper ? (
-        <Text
-          style={[
-            theme.typography.label.sm,
-            styles.helperText,
-            { color: theme.colors.textMuted },
-          ]}
-        >
-          {helper}
-        </Text>
-      ) : null}
-      {error ? (
-        <Text
-          style={[
-            theme.typography.label.sm,
-            styles.errorText,
-            { color: theme.colors.danger },
-          ]}
-        >
-          {error}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
 // ─── Time input (HH:MM 24-hour) ──────────────────────────────────────────────
 
 export interface TimeInputProps {
@@ -514,12 +296,6 @@ function parseSafeYmd(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function parseSafePeriod(s: string): Date | null {
-  if (!/^\d{4}-\d{2}$/.test(s)) return null;
-  const d = parseISO(`${s}-01`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
 function parseSafeHm(s: string): Date | null {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(s)) return null;
   const [hh, mm] = s.split(':').map((x) => Number(x));
@@ -562,16 +338,6 @@ function makeStyles(theme: Theme) {
     doneRow: {
       paddingTop: theme.spacing.md,
       alignSelf: 'flex-end',
-    },
-    monthItem: {
-      height: 48,
-      justifyContent: 'center',
-      paddingHorizontal: theme.spacing.md,
-      borderBottomWidth: theme.borderWidth.hairline,
-    },
-    cancelRow: {
-      paddingTop: theme.spacing.md,
-      alignItems: 'center',
     },
   });
 }

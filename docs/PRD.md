@@ -130,18 +130,20 @@ These are the answers to questions that came up during design. They go here so f
 
 None blocking v1 build. If new questions come up during implementation, they belong here, not invented silently in code.
 
-## Build order
+## Features delivered
 
-The user wants to be using the app within weeks, not months. Ship in this order:
+v1 is shipped. Treat this list as the canonical "what exists." Anything not
+on it isn't in the app.
 
-1. Data layer — schema, migrations, basic CRUD. No UI yet.
-2. Bills tab + Mark-as-paid + Add bill — minimal end-to-end loop. The user can replace the bills layer of their spreadsheet at this point.
-3. Wallets tab (outflow only, no balance toggle) — visibility into per-wallet outflow.
-4. Spending tab + quick-add — the one-off log.
-5. Onboarding — only needed once the rest is real.
-6. Insights tab — aggregations and trends.
-7. Year grid — preserves spreadsheet view.
-8. Settings polish — manage wallets/bills/categories, theme picker, export, app lock.
-9. Optional balance toggle on wallets.
-
-After step 2, the app is daily-usable for the bills layer. That's the milestone to reach as fast as possible.
+- [x] Data layer — Drizzle schema, migrations, typed CRUD per entity
+- [x] Bills tab — current-month list with strikethrough-when-paid, summary card, reminder callout
+- [x] Mark-as-paid sheet + payment details sheet (separate flows for paid vs unpaid taps)
+- [x] Add / edit bill — full form: cadence (monthly/quarterly/yearly/custom), due-day, default wallet, reminders, auto-forecast
+- [x] Wallets tab — per-wallet outflow card + optional running balance line
+- [x] Spending tab + quick-add expense
+- [x] Transfers — record screen, full history screen
+- [x] Onboarding (first run) — pick wallets, add first bill (skippable)
+- [x] Insights tab — bills/spending split, by-wallet, by-category, anomaly callouts, stacked-bar trend chart with 3M / 6M / 12M / 24M window
+- [x] Year grid — bills × months matrix, wallet-tinted paid cells
+- [x] Settings — manage wallets, manage bills, manage categories, theme (Light / Dark / System), app lock (biometric), export (JSON + zipped CSV), reset
+- [x] Show-balance toggle — per wallet, with current-balance back-calculation
