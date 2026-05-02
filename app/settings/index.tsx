@@ -4,10 +4,8 @@
 // Per docs/PRD.md §"Supporting screens" — Settings, this is the parent
 // screen for manage-wallets, manage-bills, categories, theme, app lock,
 // notifications, export, and backup status. PR 10a wired Wallets; PR 10b
-// wired Bills and Categories; PR 10c wired Theme; PR 10d wires App lock.
-// The remaining row (Export) still renders as disabled "Coming soon" so
-// the shell of the Settings hub is in place for PR 10e to drop into
-// without restructuring.
+// wired Bills and Categories; PR 10c wired Theme; PR 10d wired App lock;
+// PR 10e wires Export. Every row is now interactive — no more "Coming soon."
 //
 // Layout mirrors `app/transfers/index.tsx`: SafeAreaView root, header
 // with Back link + centered title, ScrollView body. No FAB — Settings
@@ -66,8 +64,8 @@ const ROWS: ReadonlyArray<SettingsRow> = [
   {
     key: 'export',
     title: 'Export',
-    subtitle: 'Save your data as JSON or CSV',
-    href: null,
+    subtitle: 'Save your data to JSON or CSV files.',
+    href: '/settings/export',
   },
 ];
 
