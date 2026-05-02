@@ -47,6 +47,7 @@ import {
   type BillInsert,
 } from '@/db/queries/bills';
 import { listWallets, type Wallet } from '@/db/queries/wallets';
+import { setOnboardingCompleted } from '@/state/onboarding';
 import { useTheme } from '@/state/theme';
 import type { Theme } from '@/styles/theme';
 
@@ -224,9 +225,17 @@ export default function BillEditScreen() {
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const db = useDb();
   const router = useRouter();
-  const { id: rawId } = useLocalSearchParams<{ id: string }>();
+  const { id: rawId, onboarding: rawOnboarding } = useLocalSearchParams<{
+    id: string;
+    onboarding?: string;
+  }>();
   const id = typeof rawId === 'string' ? rawId : '';
   const isNew = id === 'new';
+  // When the form is launched from the onboarding flow we land on the Bills
+  // tab after save/skip and flip the persisted onboarding flag, instead of
+  // popping back into the onboarding screen. The query-param wiring lets the
+  // form stay agnostic to its caller in every other case.
+  const fromOnboarding = rawOnboarding === '1';
 
   const today = useMemo(() => new Date(), []);
 
@@ -304,11 +313,27 @@ export default function BillEditScreen() {
       } else {
         await updateBill(db, id, payload);
       }
-      router.back();
+      if (fromOnboarding) {
+        setOnboardingCompleted(true);
+        router.replace('/(tabs)/bills');
+      } else {
+        router.back();
+      }
     } catch (err) {
       setSubmitError((err as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Cancel from the onboarding flow completes onboarding too — the user is
+  // explicitly opting to add a bill later. Otherwise standard back-pop.
+  function handleCancel() {
+    if (fromOnboarding) {
+      setOnboardingCompleted(true);
+      router.replace('/(tabs)/bills');
+    } else {
+      router.back();
     }
   }
 
@@ -362,8 +387,10 @@ export default function BillEditScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={[theme.typography.body.sm, { color: theme.colors.accent }]}>Cancel</Text>
+        <Pressable onPress={handleCancel} hitSlop={8}>
+          <Text style={[theme.typography.body.sm, { color: theme.colors.accent }]}>
+            {fromOnboarding ? 'Skip' : 'Cancel'}
+          </Text>
         </Pressable>
         <Text style={[theme.typography.title.sm, { color: theme.colors.text }]}>
           {isNew ? 'Add bill' : 'Edit bill'}
