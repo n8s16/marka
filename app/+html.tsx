@@ -1,0 +1,62 @@
+// Custom HTML wrapper for the static web export.
+//
+// Expo Router uses this file to template every page's <html> envelope. We
+// inject:
+//   - The PWA manifest link (`/manifest.webmanifest`).
+//   - iOS Safari "Add to Home Screen" meta tags (apple-mobile-web-app-*).
+//     Without these, iOS won't treat the bookmark as a standalone PWA —
+//     it opens in a Safari tab instead of fullscreen.
+//   - Theme + viewport meta. Viewport's `viewport-fit=cover` is required
+//     so the app draws under the iPhone notch / home indicator when
+//     installed standalone.
+//
+// The manifest, icons, and any `<link>` targets here are served from the
+// `/public` folder (`public/manifest.webmanifest`, `public/icon-*.png`).
+// Anything in `public/` is copied verbatim to the export root by Expo.
+//
+// Reference: https://docs.expo.dev/router/reference/static-rendering/#root-html
+
+import { ScrollViewStyleReset } from 'expo-router/html';
+import type { PropsWithChildren } from 'react';
+
+export default function Root({ children }: PropsWithChildren) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+        />
+
+        {/* PWA manifest. */}
+        <link rel="manifest" href="/manifest.webmanifest" />
+
+        {/* Theme + light/dark color hints. iOS uses theme-color for the
+            status bar background when the PWA is launched standalone. */}
+        <meta name="theme-color" content="#1A1A1A" />
+        <meta name="color-scheme" content="light dark" />
+
+        {/* iOS "Add to Home Screen" — without these, iOS opens the
+            bookmark in a Safari tab rather than as a standalone app.
+            apple-mobile-web-app-capable replaces Apple's deprecated UA
+            sniff for "is this a standalone PWA?" */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="Marka" />
+        <link rel="apple-touch-icon" href="/icon-1024.png" />
+
+        <title>Marka</title>
+
+        {/* Expo's reset for full-page ScrollViews — must come before
+            user styles so layout calc is correct on first paint. */}
+        <ScrollViewStyleReset />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
