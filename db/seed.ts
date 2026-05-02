@@ -3,21 +3,24 @@
 // Per docs/PRD.md and docs/DATA_MODEL.md, the app ships:
 //
 //   - Eight starter categories on first run: Food, Transport, Shopping, Tech,
-//     Health, Entertainment, Personal, Misc.
-//   - Four canonical PH wallets pre-checked in onboarding: Maya, GCash,
-//     UnionBank, Cash.
+//     Health, Entertainment, Personal, Misc. Auto-seeded at boot — the user
+//     never picks categories during onboarding.
+//   - Four canonical PH wallets offered in onboarding: Maya, GCash,
+//     UnionBank, Cash. The user picks which ones to keep on the first
+//     onboarding step (`/onboarding/pick-wallets`) and we insert the chosen
+//     subset there. We do NOT auto-seed wallets at boot — see DB provider.
 //
 // Users can edit and archive both; we never hard-delete on their behalf.
 //
-// Both seed helpers are idempotent: if any rows already exist in their target
-// table (including archived ones), they return without inserting. The caller
-// controls timing — typically right after migrations run at app boot.
+// `seedStarterCategories` is idempotent — if any rows already exist, it
+// returns without inserting. The caller (DB provider) runs it once after
+// migrations.
 
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 import { uuid } from '../utils/uuid';
-import { category, wallet } from './schema';
+import { category } from './schema';
 
 // Canonical starter category list. Exported so tests, the UI's "restore
 // defaults" affordance, and onboarding screens can reference the same source
@@ -62,9 +65,8 @@ export async function seedStarterCategories(db: AnySQLiteDB): Promise<void> {
 
 // Canonical starter wallet list — the four PH defaults pre-checked during
 // onboarding (PRD §"Onboarding"). Brand colors mirror tokens.walletBrand and
-// docs/PRD.md §"Wallet brand colors". Exported as a readonly array so other
-// code (onboarding, tests, restore-defaults affordances) can reference the
-// same source of truth.
+// docs/PRD.md §"Wallet brand colors". The pick-wallets onboarding screen
+// reads this directly to render its checkbox list.
 export const STARTER_WALLETS = [
   { name: 'Maya', color: '#00B14F', type: 'e_wallet' },
   { name: 'GCash', color: '#007DFE', type: 'e_wallet' },
@@ -77,26 +79,3 @@ export const STARTER_WALLETS = [
 }>;
 
 export type StarterWalletName = (typeof STARTER_WALLETS)[number]['name'];
-
-export async function seedDefaultWallets(db: AnySQLiteDB): Promise<void> {
-  // Idempotent: any wallet row (archived or not) means seeding has already
-  // happened or the user has explicitly added wallets — don't second-guess.
-  const result = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(wallet);
-
-  const existing = result[0]?.count ?? 0;
-  if (existing > 0) return;
-
-  const rows = STARTER_WALLETS.map((w) => ({
-    id: uuid(),
-    name: w.name,
-    color: w.color,
-    type: w.type,
-    show_balance: false,
-    opening_balance: null,
-    archived: false,
-  }));
-
-  await db.insert(wallet).values(rows);
-}

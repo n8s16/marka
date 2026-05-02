@@ -32,7 +32,7 @@ import { drizzle, type ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 
 import migrations from './migrations/migrations';
-import { seedDefaultWallets, seedStarterCategories } from './seed';
+import { seedStarterCategories } from './seed';
 
 // expo-sqlite's openDatabaseSync is required for Drizzle's expo-sqlite driver
 // — the driver assumes synchronous access for transaction semantics.
@@ -72,8 +72,11 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
 
     (async () => {
       try {
+        // Categories seed is unconditional — they're a fixed, app-managed
+        // list users edit but don't initially pick. Wallets are picked
+        // through the onboarding flow, so we no longer auto-seed them
+        // here; see app/onboarding/pick-wallets.tsx.
         await seedStarterCategories(dbInstance);
-        await seedDefaultWallets(dbInstance);
         setSeedState({ done: true });
       } catch (err) {
         setSeedState({ done: false, error: err as Error });
