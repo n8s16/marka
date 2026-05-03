@@ -70,11 +70,55 @@ export default function Root({ children }: PropsWithChildren) {
             We add a hairline border on each side at >=720px so the
             centred shell visually separates from the surrounding
             chrome on large monitors. */}
+        {/* Expo's reset for full-page ScrollViews. Must come before
+            our overrides so we can override the parts that need
+            adjusting for iOS PWA standalone mode. */}
+        <ScrollViewStyleReset />
+
         <style>{`
+          /* Force the document tree to a real viewport height in
+             iPhone PWA standalone mode. Expo's reset uses
+             \`height: 100%\`, which only works if every ancestor up
+             to <html> has a defined height; in some standalone-mode
+             render paths this collapses on short content and leaves
+             a body-coloured strip below the screen content. \`100dvh\`
+             is the dynamic-viewport-height unit — the layout viewport
+             excluding any browser chrome — and is the right answer
+             on iOS 16+. We pin html, body, and #root to it explicitly. */
+          html, body, #root {
+            height: 100dvh;
+            min-height: 100dvh;
+          }
+          /* React Native Web stacks Views vertically by default but
+             #root from Expo's reset has \`display: flex\` with no
+             flex-direction, so it defaults to row. The first child
+             (the React tree) gets stretched to height via align-items
+             stretch on the cross axis, which IS height in row layout.
+             Setting flex-direction: column makes the intent explicit
+             and matches how React Native renders natively. */
+          #root { flex-direction: column; }
+
+          /* Body background matches the tab bar's surface colour in
+             each theme. Without this, the iPhone's home indicator
+             zone (the ~34px below the tab bar) renders the browser
+             default body colour, which is darker than
+             \`theme.colors.surface\` in dark mode — visible as a
+             black strip. Setting body bg to surface makes the tab
+             bar visually extend to the screen edge. Light mode bg
+             and surface are both #FFFFFF so no contrast issue. */
           html, body { background-color: #FFFFFF; }
           @media (prefers-color-scheme: dark) {
             html, body { background-color: #1A1A1A; }
           }
+
+          /* Phone-shaped centred shell on wide viewports: above 480px
+             cap #root at 480px and centre it horizontally. The body
+             background fills the side margins, which on desktop reads
+             as a "phone-shaped" preview without us writing any
+             tablet/desktop layouts. Mobile (<480px) is unchanged.
+             A hairline border kicks in at >=720px so the centred
+             shell visually separates from the surrounding chrome on
+             large monitors. */
           @media (min-width: 480px) {
             #root {
               max-width: 480px;
@@ -93,11 +137,12 @@ export default function Root({ children }: PropsWithChildren) {
               border-right-color: rgba(255, 255, 255, 0.08);
             }
           }
-          /* Hide the native date/time picker indicator. We open the
-             picker programmatically via showPicker() on click + focus,
-             and the built-in icon renders as a dark-on-dark strip on
-             the right edge in dark mode. Without this, you see an
-             empty grey rectangle next to the value. */
+
+          /* Hide the native date / time picker indicator. We open
+             the picker programmatically via showPicker() on click +
+             focus, and the built-in icon renders as a dark-on-dark
+             strip on the right edge in dark mode. Without this, you
+             see an empty grey rectangle next to the value. */
           input[type="date"]::-webkit-calendar-picker-indicator,
           input[type="time"]::-webkit-calendar-picker-indicator {
             display: none;
@@ -110,10 +155,6 @@ export default function Root({ children }: PropsWithChildren) {
             appearance: none;
           }
         `}</style>
-
-        {/* Expo's reset for full-page ScrollViews — must come before
-            user styles so layout calc is correct on first paint. */}
-        <ScrollViewStyleReset />
       </head>
       <body>{children}</body>
     </html>
