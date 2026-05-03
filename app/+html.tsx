@@ -53,6 +53,20 @@ export default function Root({ children }: PropsWithChildren) {
 
         <title>Marka</title>
 
+        {/* Body background matches the tab bar's surface colour in each
+            theme. Without this, the iPhone's home indicator zone (the
+            ~34px below the tab bar) renders the browser default body
+            colour, which is darker than `theme.colors.surface` in
+            dark mode — visible as a black strip. Setting body bg to
+            surface makes the tab bar visually extend to the screen edge.
+            Light mode bg and surface are equal so no contrast issue. */}
+        <style>{`
+          html, body { background-color: #FFFFFF; }
+          @media (prefers-color-scheme: dark) {
+            html, body { background-color: #1A1A1A; }
+          }
+        `}</style>
+
         {/* Expo's reset for full-page ScrollViews — must come before
             user styles so layout calc is correct on first paint. */}
         <ScrollViewStyleReset />
