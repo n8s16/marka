@@ -13,15 +13,24 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/state/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const ICON_SIZE = 22;
+// Baseline tab bar height before adding the bottom safe-area inset.
+// React Navigation defaults to ~49pt on iOS / 56dp on Android natively,
+// but on web/PWA it doesn't auto-account for the iPhone home indicator
+// zone. We compute height as base + insets.bottom and apply
+// paddingBottom = insets.bottom so the icons + labels render fully
+// above the indicator. 56 keeps comfortable touch targets.
+const BASE_TAB_HEIGHT = 56;
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   function makeIcon(active: IconName, inactive: IconName) {
     return ({ focused, color }: { focused: boolean; color: string }) => (
@@ -42,6 +51,8 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
+          height: BASE_TAB_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: theme.typography.label.md.fontSize,

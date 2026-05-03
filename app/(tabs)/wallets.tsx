@@ -227,7 +227,7 @@ function makeStyles(theme: Theme) {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    scrollContent: { paddingBottom: theme.spacing.xxxl },
+    scrollContent: { flexGrow: 1, paddingBottom: theme.spacing.xxxl },
     stickyHeader: {
       backgroundColor: theme.colors.bg,
       paddingTop: theme.spacing.xs,
