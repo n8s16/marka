@@ -1,0 +1,45 @@
+# Netlify deployment config for the Marka PWA.
+#
+# Build flow: `npm install` → `npm run web:export` → publish `dist/`.
+# Netlify auto-runs `npm install` before the build, so we don't need to
+# spell that step out.
+#
+# Routing model:
+#   - Expo Router's static export emits one HTML per route at the top
+#     level (e.g. `dist/bills.html`, `dist/wallets.html`).
+#   - Netlify's pretty-URL resolver finds `/bills.html` automatically
+#     when a request comes in for `/bills`. No config needed for those.
+#   - Dynamic routes like `/bills/<uuid>` have no matching static file.
+#     The catch-all rewrite at the bottom of this file points them to
+#     `/index.html` (status 200 = rewrite, not redirect), and the JS
+#     bundle hydrates the correct route from the URL.
+#
+# Caching:
+#   - `_expo/static/**` is content-hashed by Metro. Safe to cache
+#     forever.
+#   - `manifest.webmanifest`, icons, and the wasm payload don't get
+#     hashed (they're staged via `public/`), so we leave them on
+#     Netlify's default short-revalidation cache.
+
+[build]
+  command = "npm run web:export"
+  publish = "dist"
+
+[build.environment]
+  # Pin to a Node version we know works with Expo SDK 54's tooling.
+  NODE_VERSION = "20"
+
+# Hashed static bundles — cache aggressively.
+[[headers]]
+  for = "/_expo/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Single SPA fallback — anything we couldn't match to a static file
+# falls through to the root document so the JS bundle can hydrate the
+# requested route. Status 200 = rewrite (no URL change in the address
+# bar), not a 301/302 redirect.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
