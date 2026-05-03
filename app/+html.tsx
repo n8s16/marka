@@ -1,18 +1,25 @@
 // Custom HTML wrapper for the static web export.
 //
-// Expo Router uses this file to template every page's <html> envelope. We
-// inject:
-//   - The PWA manifest link (`/manifest.webmanifest`).
-//   - iOS Safari "Add to Home Screen" meta tags (apple-mobile-web-app-*).
-//     Without these, iOS won't treat the bookmark as a standalone PWA —
-//     it opens in a Safari tab instead of fullscreen.
-//   - Theme + viewport meta. Viewport's `viewport-fit=cover` is required
-//     so the app draws under the iPhone notch / home indicator when
-//     installed standalone.
+// We deliberately do NOT enable iOS standalone PWA mode (the
+// apple-mobile-web-app-capable + status-bar-style meta tags). Standalone
+// mode caused a persistent "empty space at the bottom" issue on short
+// screens that we couldn't fix without invasive layout changes — see
+// research linked in PR #23. Treating the home-screen bookmark as a
+// regular Safari window means iOS keeps its URL bar at the bottom,
+// which covers the home-indicator zone and eliminates the empty strip.
+// Tradeoff: the home-screen icon launches with the Safari URL bar
+// visible. Worth it for the layout consistency.
 //
-// The manifest, icons, and any `<link>` targets here are served from the
-// `/public` folder (`public/manifest.webmanifest`, `public/icon-*.png`).
-// Anything in `public/` is copied verbatim to the export root by Expo.
+// We inject:
+//   - PWA manifest link (still useful for icon + name on Android,
+//     which doesn't have the iOS standalone-mode quirk).
+//   - Theme + viewport meta.
+//   - Apple touch icon for the home-screen bookmark.
+//
+// The manifest, icons, and any `<link>` targets here are served from
+// the `/public` folder (`public/manifest.webmanifest`,
+// `public/icon-*.png`). Anything in `public/` is copied verbatim to
+// the export root by Expo.
 //
 // Reference: https://docs.expo.dev/router/reference/static-rendering/#root-html
 
@@ -39,15 +46,13 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="theme-color" content="#1A1A1A" />
         <meta name="color-scheme" content="light dark" />
 
-        {/* iOS "Add to Home Screen" — without these, iOS opens the
-            bookmark in a Safari tab rather than as a standalone app.
-            apple-mobile-web-app-capable replaces Apple's deprecated UA
-            sniff for "is this a standalone PWA?" */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta
-          name="apple-mobile-web-app-status-bar-style"
-          content="black-translucent"
-        />
+        {/* iOS home-screen bookmark assets. We intentionally do NOT
+            include `apple-mobile-web-app-capable: yes` — see the file
+            header comment. With it omitted, iOS keeps the Safari URL
+            bar visible when launching from the home-screen icon,
+            which covers the home indicator zone and avoids the
+            "empty strip at the bottom" layout issue we hit in
+            standalone mode. The touch-icon and title still apply. */}
         <meta name="apple-mobile-web-app-title" content="Marka" />
         <link rel="apple-touch-icon" href="/icon-1024.png" />
 
