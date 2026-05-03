@@ -28,7 +28,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns } from 'date-fns';
 
@@ -225,6 +225,7 @@ export default function BillEditScreen() {
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const db = useDb();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id: rawId, onboarding: rawOnboarding } = useLocalSearchParams<{
     id: string;
     onboarding?: string;
@@ -402,19 +403,9 @@ export default function BillEditScreen() {
         <Text style={[theme.typography.title.sm, { color: theme.colors.text }]}>
           {isNew ? 'Add bill' : 'Edit bill'}
         </Text>
-        <Pressable onPress={handleSave} disabled={saving} hitSlop={8}>
-          <Text
-            style={[
-              theme.typography.body.sm,
-              {
-                color: saving ? theme.colors.textMuted : theme.colors.accent,
-                fontWeight: theme.typography.weights.medium,
-              },
-            ]}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </Text>
-        </Pressable>
+        {/* Spacer keeps the title centred against the leading Cancel
+            link. Save now lives in the sticky bottom action bar. */}
+        <View style={styles.headerSpacer} />
       </View>
 
       <KeyboardAvoidingView
@@ -603,6 +594,43 @@ export default function BillEditScreen() {
           <View style={{ height: theme.spacing.xxxl }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Sticky bottom action bar — fills the home-indicator zone with
+          the primary action, matching the iOS form pattern. The
+          paddingBottom equals the safe-area inset so the button sits
+          comfortably above the indicator. */}
+      <View
+        style={[
+          styles.bottomBar,
+          { paddingBottom: theme.spacing.md + insets.bottom },
+        ]}
+      >
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel={saving ? 'Saving' : 'Save'}
+          style={({ pressed }) => [
+            styles.saveButton,
+            {
+              backgroundColor: theme.colors.accent,
+              opacity: saving ? theme.opacity.muted : pressed ? theme.opacity.muted : 1,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              theme.typography.body.md,
+              {
+                color: theme.colors.bg,
+                fontWeight: theme.typography.weights.medium,
+              },
+            ]}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -645,6 +673,26 @@ function makeStyles(theme: Theme) {
       borderRadius: theme.radii.sm,
       paddingVertical: theme.spacing.md,
       alignItems: 'center',
+    },
+    headerSpacer: {
+      // Same target width as the leading "Cancel" Pressable so flex
+      // layout keeps the title visually centred.
+      width: 56,
+    },
+    bottomBar: {
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.md,
+      // paddingBottom is applied inline so we can include the bottom
+      // safe-area inset (home indicator clearance on iPhone PWA).
+      backgroundColor: theme.colors.surface,
+      borderTopWidth: theme.borderWidth.hairline,
+      borderTopColor: theme.colors.border,
+    },
+    saveButton: {
+      borderRadius: theme.radii.md,
+      paddingVertical: theme.spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 }
