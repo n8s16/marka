@@ -42,6 +42,14 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
+          // Symmetric vertical padding so icon + label stay vertically
+          // centred in the bar. iPhone PWA still gets the bottom
+          // safe-area inset added by React Navigation on top of these
+          // values, so the labels clear the home indicator zone with
+          // a bit of extra margin.
+          paddingTop: theme.spacing.sm,
+          paddingBottom: theme.spacing.sm,
+          height: 56 + theme.spacing.sm * 2,
         },
         tabBarLabelStyle: {
           fontSize: theme.typography.label.md.fontSize,
