@@ -216,7 +216,7 @@ function makeStyles(theme: Theme) {
       paddingTop: theme.spacing.md,
       paddingBottom: theme.spacing.md,
     },
-    scrollContent: { paddingBottom: theme.spacing.xxxl },
+    scrollContent: { flexGrow: 1, paddingBottom: theme.spacing.xxxl },
     stickyHeader: {
       backgroundColor: theme.colors.bg,
       paddingTop: theme.spacing.xs,
