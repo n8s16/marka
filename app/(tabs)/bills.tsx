@@ -170,7 +170,10 @@ function makeStyles(theme: Theme) {
       paddingTop: theme.spacing.md,
       paddingBottom: theme.spacing.md,
     },
-    scrollContent: { paddingBottom: theme.spacing.xxxl },
+    // `flexGrow: 1` lets the empty-state View inside expand to fill
+    // the remaining vertical space (otherwise the empty state collapses
+    // to its natural height and leaves dead space below).
+    scrollContent: { flexGrow: 1, paddingBottom: theme.spacing.xxxl },
     stickyHeader: {
       backgroundColor: theme.colors.bg,
       paddingTop: theme.spacing.xs,
