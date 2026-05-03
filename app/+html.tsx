@@ -53,17 +53,45 @@ export default function Root({ children }: PropsWithChildren) {
 
         <title>Marka</title>
 
-        {/* Body background matches the tab bar's surface colour in each
-            theme. Without this, the iPhone's home indicator zone (the
-            ~34px below the tab bar) renders the browser default body
-            colour, which is darker than `theme.colors.surface` in
-            dark mode — visible as a black strip. Setting body bg to
-            surface makes the tab bar visually extend to the screen edge.
-            Light mode bg and surface are equal so no contrast issue. */}
+        {/* Body background matches the tab bar's surface colour in
+            each theme. Without this, the iPhone's home indicator zone
+            (the ~34px below the tab bar) renders the browser default
+            body colour, which is darker than `theme.colors.surface`
+            in dark mode — visible as a black strip. Setting body bg
+            to surface makes the tab bar visually extend to the screen
+            edge. Light mode bg and surface are both #FFFFFF so no
+            contrast issue.
+
+            Phone-shaped centred shell on wide viewports: above 480px
+            we cap #root at 480px and centre it horizontally. The body
+            background fills the side margins, which on desktop reads
+            as a "phone-shaped" preview without us writing any
+            tablet/desktop layouts. Mobile (<480px) is unchanged.
+            We add a hairline border on each side at >=720px so the
+            centred shell visually separates from the surrounding
+            chrome on large monitors. */}
         <style>{`
           html, body { background-color: #FFFFFF; }
           @media (prefers-color-scheme: dark) {
             html, body { background-color: #1A1A1A; }
+          }
+          @media (min-width: 480px) {
+            #root {
+              max-width: 480px;
+              margin-inline: auto;
+            }
+          }
+          @media (min-width: 720px) {
+            #root {
+              border-left: 1px solid rgba(0, 0, 0, 0.08);
+              border-right: 1px solid rgba(0, 0, 0, 0.08);
+            }
+          }
+          @media (min-width: 720px) and (prefers-color-scheme: dark) {
+            #root {
+              border-left-color: rgba(255, 255, 255, 0.08);
+              border-right-color: rgba(255, 255, 255, 0.08);
+            }
           }
         `}</style>
 
