@@ -24,7 +24,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
+import type { DB } from '@/db/client';
 import { endOfMonth, format as formatDate, startOfMonth } from 'date-fns';
 
 import { listCategories, type Category } from '@/db/queries/categories';
@@ -43,7 +43,7 @@ export interface ExpensesCurrentMonthState {
 }
 
 export function useExpensesCurrentMonth(
-  db: ExpoSQLiteDatabase,
+  db: DB,
   today: Date,
 ): ExpensesCurrentMonthState {
   const [expenses, setExpenses] = useState<Expense[]>([]);

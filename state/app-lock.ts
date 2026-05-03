@@ -57,6 +57,9 @@ const useAppLockStore = create<AppLockStore>()(
       // start so the user re-authenticates — persisting it would defeat
       // the lock entirely.
       partialize: (state) => ({ enabled: state.enabled }),
+      // Defer hydration to the client — see state/onboarding.ts for the
+      // SSR rationale.
+      skipHydration: true,
     },
   ),
 );
@@ -95,3 +98,7 @@ export const setAppLockUnlocked = (next: boolean): void =>
  */
 export const enableAndUnlockAppLock = (): void =>
   useAppLockStore.getState().enableAndUnlock();
+
+/** Trigger hydration. Safe to call multiple times — Zustand no-ops on repeats. */
+export const rehydrateAppLockStore = (): Promise<void> | void =>
+  useAppLockStore.persist.rehydrate();

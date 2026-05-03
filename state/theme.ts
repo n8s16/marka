@@ -68,6 +68,9 @@ const useThemeStore = create<ThemeStore>()(
       // Only the user's chosen mode is persisted; systemColorScheme is
       // derived from the OS and re-read on every cold start.
       partialize: (state) => ({ mode: state.mode }),
+      // Defer hydration to the client — see state/onboarding.ts for the
+      // SSR rationale.
+      skipHydration: true,
     },
   ),
 );
@@ -107,3 +110,7 @@ export function useThemeMode(): ThemeMode {
 export function setThemeMode(mode: ThemeMode): void {
   useThemeStore.getState().setMode(mode);
 }
+
+/** Trigger hydration. Safe to call multiple times — Zustand no-ops on repeats. */
+export const rehydrateThemeStore = (): Promise<void> | void =>
+  useThemeStore.persist.rehydrate();

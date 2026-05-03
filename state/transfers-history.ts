@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
+import type { DB } from '@/db/client';
 
 import { listTransfers, type Transfer } from '@/db/queries/transfers';
 import { listWallets, type Wallet } from '@/db/queries/wallets';
@@ -34,7 +34,7 @@ export interface TransfersHistoryState {
 }
 
 export function useTransfersHistory(
-  db: ExpoSQLiteDatabase,
+  db: DB,
 ): TransfersHistoryState {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);

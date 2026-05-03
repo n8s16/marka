@@ -33,6 +33,7 @@ export default function Root({ children }: PropsWithChildren) {
         {/* PWA manifest. */}
         <link rel="manifest" href="/manifest.webmanifest" />
 
+
         {/* Theme + light/dark color hints. iOS uses theme-color for the
             status bar background when the PWA is launched standalone. */}
         <meta name="theme-color" content="#1A1A1A" />

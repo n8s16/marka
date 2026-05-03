@@ -30,7 +30,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
+import type { DB } from '@/db/client';
 
 import { listBills, type Bill } from '@/db/queries/bills';
 import { listBillPayments, type BillPayment } from '@/db/queries/bill-payments';
@@ -47,7 +47,7 @@ export interface YearGridState {
 }
 
 export function useYearGrid(
-  db: ExpoSQLiteDatabase,
+  db: DB,
   year: number,
 ): YearGridState {
   const [bills, setBills] = useState<Bill[]>([]);

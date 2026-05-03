@@ -45,6 +45,10 @@ const useOnboardingStore = create<OnboardingStore>()(
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,
       }),
+      // Skip auto-hydration so we don't hit AsyncStorage during static
+      // rendering (where `window` doesn't exist). Hydration is triggered
+      // explicitly from a client-only useEffect — see hydrateAllStores().
+      skipHydration: true,
       onRehydrateStorage: () => (state) => {
         // Mark hydration done after rehydrate finishes (success or failure).
         state?.setCompleted(state.hasCompletedOnboarding);
@@ -65,3 +69,7 @@ export const useOnboardingHydrated = (): boolean =>
 /** Imperative — flip the persisted flag. */
 export const setOnboardingCompleted = (next: boolean): void =>
   useOnboardingStore.getState().setCompleted(next);
+
+/** Trigger hydration. Safe to call multiple times — Zustand no-ops on repeats. */
+export const rehydrateOnboardingStore = (): Promise<void> | void =>
+  useOnboardingStore.persist.rehydrate();
