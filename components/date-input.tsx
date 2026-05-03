@@ -178,6 +178,8 @@ function inputStyle({ theme, hasError, disabled }: InputStyleArgs): React.CSSPro
     width: '100%',
     boxSizing: 'border-box',
     opacity: disabled ? theme.opacity.disabled : 1,
+    // The native calendar/clock indicator is hidden globally via a
+    // CSS rule in `app/+html.tsx` — see comment there.
   };
 }
 

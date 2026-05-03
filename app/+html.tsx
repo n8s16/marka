@@ -93,6 +93,22 @@ export default function Root({ children }: PropsWithChildren) {
               border-right-color: rgba(255, 255, 255, 0.08);
             }
           }
+          /* Hide the native date/time picker indicator. We open the
+             picker programmatically via showPicker() on click + focus,
+             and the built-in icon renders as a dark-on-dark strip on
+             the right edge in dark mode. Without this, you see an
+             empty grey rectangle next to the value. */
+          input[type="date"]::-webkit-calendar-picker-indicator,
+          input[type="time"]::-webkit-calendar-picker-indicator {
+            display: none;
+            -webkit-appearance: none;
+          }
+          input[type="date"],
+          input[type="time"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+          }
         `}</style>
 
         {/* Expo's reset for full-page ScrollViews — must come before
