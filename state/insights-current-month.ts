@@ -33,7 +33,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
+import type { DB } from '@/db/client';
 import {
   endOfMonth,
   format as formatDate,
@@ -113,7 +113,7 @@ const ANOMALY_LOOKBACK_MONTHS = 3;
 const DEFAULT_TREND_MONTHS = 6;
 
 export function useInsightsCurrentMonth(
-  db: ExpoSQLiteDatabase,
+  db: DB,
   today: Date,
   windowMonths: number = DEFAULT_TREND_MONTHS,
 ): InsightsCurrentMonthState {

@@ -14,6 +14,7 @@
 //   5. Stack — Expo Router's default; `(tabs)` becomes a group route. Theme
 //      is consumed inside screens via `useTheme()` from state/theme.
 
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -21,8 +22,21 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '@/components/app-lock-gate';
 import { DatabaseProvider } from '@/db/client';
+import { rehydrateAppLockStore } from '@/state/app-lock';
+import { rehydrateOnboardingStore } from '@/state/onboarding';
+import { rehydrateThemeStore } from '@/state/theme';
 
 export default function RootLayout() {
+  // Trigger AsyncStorage rehydration once, client-side only. Stores are
+  // configured with skipHydration:true so they don't auto-hit AsyncStorage
+  // during static rendering (where `window` is undefined). Doing it from a
+  // useEffect guarantees a client environment.
+  useEffect(() => {
+    void rehydrateOnboardingStore();
+    void rehydrateAppLockStore();
+    void rehydrateThemeStore();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

@@ -40,7 +40,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
+import type { DB } from '@/db/client';
 import { format as formatDate } from 'date-fns';
 
 import {
@@ -79,7 +79,7 @@ export interface WalletsCurrentMonthState {
 const ZERO: OutflowBreakdown = { bills: 0, spending: 0, total: 0 };
 
 export function useWalletsCurrentMonth(
-  db: ExpoSQLiteDatabase,
+  db: DB,
   today: Date,
 ): WalletsCurrentMonthState {
   const [wallets, setWallets] = useState<Wallet[] | null>(null);

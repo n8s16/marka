@@ -25,6 +25,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 
@@ -323,7 +324,7 @@ export default function ManageBillsScreen() {
             },
           ]}
         >
-          <Text style={[styles.fabIcon, { color: theme.colors.bg }]}>+</Text>
+          <Ionicons name="add" size={28} color={theme.colors.bg} />
         </Pressable>
       </View>
     </SafeAreaView>
@@ -384,11 +385,6 @@ function makeStyles(theme: Theme) {
       shadowOpacity: 0.2,
       shadowRadius: 4,
       elevation: 4,
-    },
-    fabIcon: {
-      fontSize: 28,
-      lineHeight: 32,
-      fontWeight: '500',
     },
   });
 }

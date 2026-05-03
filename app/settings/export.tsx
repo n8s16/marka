@@ -39,6 +39,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { File, Paths } from 'expo-file-system';
@@ -352,14 +353,11 @@ function ExportRow({
           {subtitle}
         </Text>
       </View>
-      <Text
-        style={[
-          theme.typography.body.sm,
-          { color: theme.colors.textFaint },
-        ]}
-      >
-        ›
-      </Text>
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={theme.colors.textFaint}
+      />
     </Pressable>
   );
 }

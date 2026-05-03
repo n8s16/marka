@@ -327,13 +327,20 @@ export default function BillEditScreen() {
   }
 
   // Cancel from the onboarding flow completes onboarding too — the user is
-  // explicitly opting to add a bill later. Otherwise standard back-pop.
+  // explicitly opting to add a bill later. Otherwise pop back to the
+  // previous screen, falling back to the Bills tab when there's nothing
+  // to pop (e.g. the user opened /bills/new in a fresh tab and history
+  // is empty — `router.back()` is a no-op in that case on web).
   function handleCancel() {
     if (fromOnboarding) {
       setOnboardingCompleted(true);
       router.replace('/(tabs)/bills');
-    } else {
+      return;
+    }
+    if (router.canGoBack()) {
       router.back();
+    } else {
+      router.replace('/(tabs)/bills');
     }
   }
 

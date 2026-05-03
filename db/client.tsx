@@ -1,23 +1,44 @@
-// Database connection, migration runner, and React context provider.
+// Web-first DB client — sql.js + IndexedDB.
 //
-// Why this file exists: every screen needs the same Drizzle DB instance, but
-// expo-sqlite's `openDatabaseSync` should only be called once per app boot.
-// Migrations and seeds also need to run exactly once before any query runs.
-// We solve both by opening the DB at module-load and gating children behind a
-// provider that completes migrations + seeds before rendering its tree.
+// Why sql.js + IndexedDB instead of expo-sqlite/web (wa-sqlite + OPFS):
 //
-// Pattern:
-//   - openDatabase() — `openDatabaseSync('marka.db')`. expo-sqlite's default
-//     location lands the file in iOS Documents/ (iCloud-backed-up) and
-//     Android default app data dir per devops-engineer guidance — we don't
-//     override.
-//   - createDb() — wraps with drizzle(db).
-//   - DatabaseProvider — runs migrations via useMigrations, then runs the
-//     idempotent seeds once, then renders children. Renders a minimal loading
-//     view while pending and an error view if migrations fail.
-//   - useDb() — hook that returns the Drizzle DB instance. Throws if called
-//     outside the provider so we fail loud rather than producing a runtime
-//     undefined-deref deep in a screen.
+//   wa-sqlite's `SyncAccessHandle` pool deadlocks once an init crashes
+//   leaving an open SAH. The "modifications are not allowed" failure is
+//   well-documented; in practice it bricks the database for the entire
+//   browser session. sql.js + IndexedDB has none of those constraints:
+//   no SharedArrayBuffer, no cross-origin isolation requirement, no
+//   COOP/COEP headers, no service worker dance — it just works in any
+//   modern browser, including Safari and the iOS PWA we care about.
+//
+//   Tradeoff: writes serialize the whole DB to bytes and persist via
+//   IndexedDB. At Marka's data volumes (hundreds to low-thousands of
+//   rows, < 100 KB serialized) this is sub-10ms — perfectly fine.
+//
+// Persistence model — `total_changes()` polling:
+//
+//   SQLite's `total_changes()` function returns the cumulative row
+//   count modified by INSERT/UPDATE/DELETE on the current connection.
+//   It increments monotonically across our entire session, so polling
+//   it on a 500 ms timer is a perfect change detector — whenever it
+//   has moved since the last save, we serialize and write to IndexedDB.
+//
+//   (Why not `pragma data_version`? It only fires when *other*
+//   connections write to the file — useless for a single-connection
+//   browser DB.)
+//
+//   This polling is bulletproof: it doesn't depend on us hooking the
+//   right driver method, doesn't care about transactions, and catches
+//   any write path including future ones we haven't enumerated.
+//
+//   On `pagehide` and `visibilitychange:hidden`, we do a final
+//   best-effort flush so a tab close mid-burst persists the latest
+//   state. The browser may cancel pending IDB writes on a hard kill,
+//   but for soft navigations (refresh, route change, app close) it
+//   typically completes — the bundle is < 100 KB.
+//
+// Diagnostics: every save logs a single line to the console with the
+// new data_version and the serialized byte count. If you suspect a
+// persistence bug, that log makes it obvious whether saves are firing.
 
 import React, {
   createContext,
@@ -27,99 +48,289 @@ import React, {
   useState,
 } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { openDatabaseSync } from 'expo-sqlite';
-import { drizzle, type ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
-import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
+import { drizzle, type SQLJsDatabase } from 'drizzle-orm/sql-js';
+import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 
-import migrations from './migrations/migrations';
+import migrationsBundle from './migrations/migrations';
 import { seedStarterCategories } from './seed';
 
-// expo-sqlite's openDatabaseSync is required for Drizzle's expo-sqlite driver
-// — the driver assumes synchronous access for transaction semantics.
-export function openDatabase() {
-  return openDatabaseSync('marka.db');
+/** The DB type every screen / hook / query helper accepts. */
+export type DB = SQLJsDatabase;
+
+// ---------- IndexedDB layer ----------
+// We stash the entire SQLite bytes blob under a single key. No need for
+// a record-oriented schema — sql.js owns the SQLite layout in memory.
+
+const IDB_NAME = 'marka-store';
+const STORE = 'kv';
+const KEY = 'sqlite-bytes';
+
+function openIDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-export function createDb(): ExpoSQLiteDatabase {
-  return drizzle(openDatabase());
+async function readBytes(): Promise<Uint8Array | null> {
+  const idb = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(KEY);
+    req.onsuccess = () => {
+      const raw = req.result;
+      if (!raw) return resolve(null);
+      // IDB may return either Uint8Array or ArrayBuffer depending on
+      // the browser's structured-clone behaviour — normalize to
+      // Uint8Array so SQL.Database's constructor is happy.
+      if (raw instanceof Uint8Array) return resolve(raw);
+      if (raw instanceof ArrayBuffer) return resolve(new Uint8Array(raw));
+      resolve(null);
+    };
+    req.onerror = () => reject(req.error);
+  });
 }
 
-// Module-level instance: opening expo-sqlite is cheap and idempotent against
-// the same path, but to keep the React tree clean we resolve the DB once.
-const dbInstance = createDb();
+async function writeBytes(bytes: Uint8Array): Promise<void> {
+  const idb = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(bytes, KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
 
-const DatabaseContext = createContext<ExpoSQLiteDatabase | null>(null);
+// ---------- sql.js init ----------
+
+let sqlPromise: Promise<SqlJsStatic> | null = null;
+
+function ensureSql(): Promise<SqlJsStatic> {
+  if (!sqlPromise) {
+    sqlPromise = initSqlJs({
+      // sql-wasm.wasm is staged in `public/` so the export pipeline
+      // copies it to the dist root verbatim. Tested URL: `/sql-wasm.wasm`.
+      locateFile: () => '/sql-wasm.wasm',
+    });
+  }
+  return sqlPromise;
+}
+
+// ---------- Persistence orchestration ----------
+
+let rawDb: Database | null = null;
+let lastSavedChanges = 0;
+let saveInflight: Promise<void> | null = null;
+
+const POLL_MS = 500;
+
+/** Read SQLite's `total_changes()` — cumulative row mutations since open. */
+function readTotalChanges(db: Database): number {
+  const result = db.exec('SELECT total_changes()');
+  return (result[0]?.values?.[0]?.[0] as number) ?? 0;
+}
+
+async function flushIfDirty(): Promise<void> {
+  if (!rawDb) return;
+  const current = readTotalChanges(rawDb);
+  if (current === lastSavedChanges) return;
+  if (saveInflight) {
+    await saveInflight;
+    if (readTotalChanges(rawDb) === lastSavedChanges) return;
+  }
+  const bytes = rawDb.export();
+  const c = readTotalChanges(rawDb);
+  saveInflight = writeBytes(bytes)
+    .then(() => {
+      lastSavedChanges = c;
+      console.log(
+        `[db] persisted ${c} changes (${bytes.byteLength.toLocaleString()} bytes)`,
+      );
+    })
+    .catch((err) => {
+      console.error('[db] flush failed', err);
+    })
+    .finally(() => {
+      saveInflight = null;
+    });
+  await saveInflight;
+}
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+function startPolling(): void {
+  if (pollTimer) return;
+  pollTimer = setInterval(() => {
+    void flushIfDirty();
+  }, POLL_MS);
+}
+
+function installPagehideFlush(): void {
+  if (typeof window === 'undefined') return;
+  // `pagehide` is the most reliable "tab going away" signal across
+  // mobile browsers. `visibilitychange→hidden` covers backgrounding on
+  // iOS PWAs. We trigger an explicit flush; IDB writes may complete
+  // even after the page is unloading for soft navigations.
+  const handler = () => {
+    void flushIfDirty();
+  };
+  window.addEventListener('pagehide', handler);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') handler();
+  });
+}
+
+// ---------- Initialization ----------
+
+async function initDb(): Promise<DB> {
+  const SQL = await ensureSql();
+  const stored = await readBytes();
+  rawDb = stored ? new SQL.Database(stored) : new SQL.Database();
+  console.log(
+    `[db] opened (${stored ? `${stored.byteLength.toLocaleString()} bytes from IDB` : 'fresh'})`,
+  );
+
+  installPagehideFlush();
+
+  // Run any pending migrations. Idempotent — already-applied migrations
+  // are skipped via the `__drizzle_migrations` tracking table.
+  runMigrations(rawDb);
+
+  // Capture the post-migration change count. If migrations ran (and
+  // therefore inserted into __drizzle_migrations), persist once so the
+  // schema is on disk before any user activity. Otherwise the polling
+  // baseline is whatever total_changes() reports right now — usually 0
+  // on a fresh open, or the previous session's count when reloaded
+  // from IDB (close enough — the next user write will trigger a save).
+  const postMigrationChanges = readTotalChanges(rawDb);
+  if (postMigrationChanges > 0 && !stored) {
+    const bytes = rawDb.export();
+    await writeBytes(bytes);
+    lastSavedChanges = postMigrationChanges;
+    console.log(
+      `[db] persisted ${postMigrationChanges} changes (post-migration, ${bytes.byteLength.toLocaleString()} bytes)`,
+    );
+  } else {
+    lastSavedChanges = postMigrationChanges;
+  }
+
+  startPolling();
+
+  return drizzle(rawDb);
+}
+
+interface JournalEntry {
+  idx: number;
+  tag: string;
+  when: number;
+  breakpoints: boolean;
+}
+
+interface MigrationsBundle {
+  journal: { entries: JournalEntry[] };
+  migrations: Record<string, string>;
+}
+
+function runMigrations(db: Database): void {
+  const bundle = migrationsBundle as unknown as MigrationsBundle;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+      tag TEXT PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    );
+  `);
+
+  const appliedResult = db.exec('SELECT tag FROM __drizzle_migrations');
+  const applied = new Set<string>();
+  if (appliedResult.length > 0) {
+    for (const row of appliedResult[0].values) {
+      applied.add(row[0] as string);
+    }
+  }
+
+  for (const entry of bundle.journal.entries) {
+    if (applied.has(entry.tag)) continue;
+    const key = `m${String(entry.idx).padStart(4, '0')}`;
+    const sql = bundle.migrations[key];
+    if (typeof sql !== 'string') {
+      throw new Error(`Migration "${entry.tag}" missing SQL body for ${key}`);
+    }
+
+    const statements = sql
+      .split('--> statement-breakpoint')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const stmt of statements) {
+      db.exec(stmt);
+    }
+
+    db.run(
+      'INSERT INTO __drizzle_migrations (tag, applied_at) VALUES (?, ?)',
+      [entry.tag, Date.now()],
+    );
+  }
+}
+
+// ---------- React provider ----------
+
+const DatabaseContext = createContext<DB | null>(null);
 
 export interface DatabaseProviderProps {
   children: React.ReactNode;
 }
 
 export function DatabaseProvider({ children }: DatabaseProviderProps) {
-  const migrationState = useMigrations(dbInstance, migrations);
-
-  // Seeds run after migrations succeed, exactly once per app session. A ref
-  // guards against React 19 strict-mode double-invocation in dev.
-  const seededRef = useRef(false);
-  const [seedState, setSeedState] = useState<{
-    done: boolean;
-    error?: Error;
-  }>({ done: false });
+  const [db, setDb] = useState<DB | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  // React 19 strict-mode fires effects twice in dev. The ref guards
+  // against double-init (which would recreate the rawDb singleton mid-
+  // flight and orphan the first one).
+  const initRef = useRef(false);
 
   useEffect(() => {
-    if (!migrationState.success) return;
-    if (seededRef.current) return;
-    seededRef.current = true;
-
+    if (initRef.current) return;
+    initRef.current = true;
     (async () => {
       try {
-        // Categories seed is unconditional — they're a fixed, app-managed
-        // list users edit but don't initially pick. Wallets are picked
-        // through the onboarding flow, so we no longer auto-seed them
-        // here; see app/onboarding/pick-wallets.tsx.
-        await seedStarterCategories(dbInstance);
-        setSeedState({ done: true });
+        const ready = await initDb();
+        await seedStarterCategories(ready);
+        // Coalesce the categories-seed write into one flush so the
+        // first paint sees a stable on-disk snapshot.
+        await flushIfDirty();
+        setDb(ready);
       } catch (err) {
-        setSeedState({ done: false, error: err as Error });
+        setError(err as Error);
       }
     })();
-  }, [migrationState.success]);
+  }, []);
 
-  if (migrationState.error) {
+  if (error) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>
-          Database migration failed: {migrationState.error.message}
+          Database failed to load: {error.message}
         </Text>
       </View>
     );
   }
-
-  if (seedState.error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>
-          Database seed failed: {seedState.error.message}
-        </Text>
-      </View>
-    );
-  }
-
-  if (!migrationState.success || !seedState.done) {
+  if (!db) {
     return (
       <View style={styles.center}>
         <Text style={styles.loadingText}>Loading…</Text>
       </View>
     );
   }
-
   return (
-    <DatabaseContext.Provider value={dbInstance}>
-      {children}
-    </DatabaseContext.Provider>
+    <DatabaseContext.Provider value={db}>{children}</DatabaseContext.Provider>
   );
 }
 
-export function useDb(): ExpoSQLiteDatabase {
+export function useDb(): DB {
   const ctx = useContext(DatabaseContext);
   if (!ctx) {
     throw new Error('useDb must be used inside <DatabaseProvider>.');

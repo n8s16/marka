@@ -11,7 +11,8 @@
 // inside a hairline-bordered card.
 
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
 
@@ -25,9 +26,11 @@ interface SettingsRow {
   href: Href;
   /** Tint the title in `colors.danger` to flag a destructive entry. */
   destructive?: boolean;
+  /** Hide the row on web — used for native-only features like biometric app lock. */
+  nativeOnly?: boolean;
 }
 
-const ROWS: ReadonlyArray<SettingsRow> = [
+const ALL_ROWS: ReadonlyArray<SettingsRow> = [
   {
     key: 'wallets',
     title: 'Wallets',
@@ -57,6 +60,7 @@ const ROWS: ReadonlyArray<SettingsRow> = [
     title: 'App lock',
     subtitle: 'Require biometric unlock to open the app',
     href: '/settings/app-lock',
+    nativeOnly: true,
   },
   {
     key: 'export',
@@ -72,6 +76,12 @@ const ROWS: ReadonlyArray<SettingsRow> = [
     destructive: true,
   },
 ];
+
+// Web bundle hides nativeOnly rows. App lock is the only one today —
+// it depends on expo-local-authentication, which has no PWA equivalent.
+const ROWS = ALL_ROWS.filter(
+  (row) => !(Platform.OS === 'web' && row.nativeOnly),
+);
 
 export default function SettingsHubScreen() {
   const theme = useTheme();
@@ -152,14 +162,11 @@ export default function SettingsHubScreen() {
                       {row.subtitle}
                     </Text>
                   </View>
-                  <Text
-                    style={[
-                      theme.typography.body.sm,
-                      { color: theme.colors.textFaint },
-                    ]}
-                  >
-                    ›
-                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={theme.colors.textFaint}
+                  />
                 </Pressable>
               );
             })}
