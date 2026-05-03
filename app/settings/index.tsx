@@ -12,6 +12,7 @@
 
 import { useMemo } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
 
@@ -161,14 +162,11 @@ export default function SettingsHubScreen() {
                       {row.subtitle}
                     </Text>
                   </View>
-                  <Text
-                    style={[
-                      theme.typography.body.sm,
-                      { color: theme.colors.textFaint },
-                    ]}
-                  >
-                    ›
-                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={theme.colors.textFaint}
+                  />
                 </Pressable>
               );
             })}
