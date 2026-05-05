@@ -21,7 +21,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,6 +29,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -158,7 +158,7 @@ export default function CategoryEditScreen() {
   }
 
   function handleArchive() {
-    Alert.alert(
+    showConfirm(
       'Archive this category?',
       'Archived categories will be hidden from pickers but historical expenses referencing this category still resolve. You can restore from the archived list later.',
       [

@@ -17,7 +17,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -26,6 +25,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns } from 'date-fns';
@@ -233,7 +233,7 @@ export default function ExpenseEditScreen() {
   }
 
   function handleDelete() {
-    Alert.alert(
+    showConfirm(
       'Delete expense?',
       'This permanently removes the expense. Past amounts in monthly totals will update once you return to the Spending tab.',
       [

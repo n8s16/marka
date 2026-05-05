@@ -18,7 +18,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -28,6 +27,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns } from 'date-fns';
@@ -345,7 +345,7 @@ export default function BillEditScreen() {
   }
 
   function handleDelete() {
-    Alert.alert(
+    showConfirm(
       'Delete bill?',
       'This archives the bill — past payments stay in your history but the bill no longer appears in your list. You can restore it from Settings.',
       [

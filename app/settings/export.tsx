@@ -42,8 +42,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import { format } from 'date-fns';
 import JSZip from 'jszip';
 
@@ -120,27 +118,10 @@ export default function ExportScreen() {
       const snapshot = await buildSnapshot();
       const json = exportToJson(snapshot);
       const stamp = format(new Date(), 'yyyy-MM-dd');
-      const file = new File(Paths.document, `marka-export-${stamp}.json`);
-      // `create` with overwrite:true so re-exporting on the same day doesn't
-      // throw on the existing file. The file is replaced cleanly.
-      file.create({ overwrite: true });
-      file.write(json);
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
-        setStatus({
-          kind: 'success',
-          message: `Saved to ${file.uri} — sharing isn't available on this device.`,
-        });
-        return;
-      }
-      await Sharing.shareAsync(file.uri, {
-        mimeType: 'application/json',
-        UTI: 'public.json',
-        dialogTitle: 'Export Marka data',
-      });
+      downloadBlob(json, `marka-export-${stamp}.json`, 'application/json');
       setStatus({
         kind: 'success',
-        message: 'JSON export ready. Choose where to save it.',
+        message: 'JSON export downloaded. Move it to iCloud Drive, Google Drive, or anywhere else from the Files app.',
       });
     } catch (err) {
       setStatus({
@@ -158,9 +139,8 @@ export default function ExportScreen() {
       const stamp = format(new Date(), 'yyyy-MM-dd');
 
       // Zip the six per-table CSVs into a single archive. JSZip is pure
-      // JS (no native code) so this works in Expo Go without any native
-      // module setup. Output as a Uint8Array so we can hand the bytes
-      // straight to expo-file-system's File.write.
+      // JS (no native code) so this works in any browser. Uint8Array
+      // output gets handed straight to the Blob constructor.
       const zip = new JSZip();
       for (const table of CSV_TABLES) {
         const body = csvs.get(table);
@@ -169,27 +149,10 @@ export default function ExportScreen() {
       }
       const zipBytes = await zip.generateAsync({ type: 'uint8array' });
 
-      const file = new File(Paths.document, `marka-csv-${stamp}.zip`);
-      file.create({ overwrite: true });
-      file.write(zipBytes);
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
-        setStatus({
-          kind: 'success',
-          message: `Saved to ${file.uri} — sharing isn't available on this device.`,
-        });
-        return;
-      }
-
-      await Sharing.shareAsync(file.uri, {
-        mimeType: 'application/zip',
-        UTI: 'public.zip-archive',
-        dialogTitle: 'Export Marka data',
-      });
+      downloadBlob(zipBytes, `marka-csv-${stamp}.zip`, 'application/zip');
       setStatus({
         kind: 'success',
-        message: 'CSV export ready (six files inside one zip). Choose where to save it.',
+        message: 'CSV export downloaded (six files inside one zip).',
       });
     } catch (err) {
       setStatus({
@@ -362,14 +325,55 @@ function ExportRow({
   );
 }
 
-// Pull a human-readable message off whatever was thrown. Errors come from
-// expo-sqlite, expo-file-system, expo-sharing, or our own logic — all of
-// them surface a `.message` string in practice. Falls back to a generic
-// label if not.
+// Pull a human-readable message off whatever was thrown. Errors come
+// from sql.js / IndexedDB / our own logic — all surface a `.message`
+// string in practice. Falls back to a generic label if not.
 function describeError(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
   return 'unknown error';
+}
+
+// Trigger a browser download for the given content. Bypasses
+// expo-file-system / expo-sharing entirely — those libraries' web
+// implementations don't support our use case (the iOS-style "save
+// to a doc dir then share via Sharing.shareAsync" flow throws
+// `validatePath is not a function` on web). The plain Blob + anchor
+// pattern works in every modern browser including iOS Safari, and
+// the user can move the downloaded file to iCloud Drive or anywhere
+// else from the Files app.
+//
+// The whole DOM dance runs inside a setTimeout(0) so the synchronous
+// React Native Web onPress handler that called us can finish first.
+// Without the defer, the body.appendChild/click/remove sequence
+// happens mid-event-dispatch, which leaves RN-Web's pointer-event
+// state in an inconsistent state — symptom is "subsequent taps on
+// the Back button do nothing." The microtask hop drops us past
+// RN-Web's event cleanup and the tap state stays healthy.
+function downloadBlob(
+  content: string | Uint8Array,
+  filename: string,
+  mimeType: string,
+): void {
+  // Cast for typescript: BlobPart accepts both, but the union
+  // confuses inference here.
+  const blob = new Blob([content as BlobPart], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  setTimeout(() => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    // Revoke + remove on a second hop so the browser commits the
+    // download before we tear down the URL.
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 100);
+  }, 0);
 }
 
 const rowStyles = StyleSheet.create({

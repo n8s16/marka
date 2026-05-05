@@ -34,7 +34,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -44,6 +43,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -351,7 +351,7 @@ export default function WalletEditScreen() {
   }
 
   function handleArchive() {
-    Alert.alert(
+    showConfirm(
       'Archive this wallet?',
       'Active wallets will be hidden from pickers but historical transactions referencing this wallet still resolve. You can restore from the archived list later.',
       [
