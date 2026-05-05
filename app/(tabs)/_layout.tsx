@@ -42,14 +42,18 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
-          // Symmetric vertical padding so icon + label stay vertically
-          // centred in the bar. iPhone PWA still gets the bottom
-          // safe-area inset added by React Navigation on top of these
-          // values, so the labels clear the home indicator zone with
-          // a bit of extra margin.
+          // Asymmetric padding by design: extra bottom space pushes
+          // the labels up and away from the iOS home-gesture zone at
+          // the very bottom of the screen. Without this buffer, the
+          // labels sit close enough to the edge that taps on
+          // "Wallets" / "Insights" intermittently register as the
+          // iOS home swipe / Siri trigger gesture instead of as taps
+          // on the tab. spacing.lg (16px) at the bottom against
+          // spacing.sm (8px) at the top keeps the icon + label
+          // optically centred while still buying the buffer.
           paddingTop: theme.spacing.sm,
-          paddingBottom: theme.spacing.sm,
-          height: 56 + theme.spacing.sm * 2,
+          paddingBottom: theme.spacing.lg,
+          height: 56 + theme.spacing.sm + theme.spacing.lg,
         },
         tabBarLabelStyle: {
           fontSize: theme.typography.label.md.fontSize,
