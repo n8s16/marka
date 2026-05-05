@@ -69,6 +69,12 @@ const ALL_ROWS: ReadonlyArray<SettingsRow> = [
     href: '/settings/export',
   },
   {
+    key: 'import',
+    title: 'Import',
+    subtitle: 'Restore from a Marka JSON export. Replaces current data.',
+    href: '/settings/import',
+  },
+  {
     key: 'reset',
     title: 'Reset',
     subtitle: 'Wipe all wallets, bills, and history. Cannot be undone.',
