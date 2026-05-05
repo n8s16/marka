@@ -24,7 +24,6 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -43,6 +42,7 @@ import { clearAllData } from '@/db/queries/reset';
 import { setAppLockEnabled, setAppLockUnlocked } from '@/state/app-lock';
 import { setOnboardingCompleted } from '@/state/onboarding';
 import { useTheme } from '@/state/theme';
+import { showConfirm } from '@/utils/confirm';
 import type { Theme } from '@/styles/theme';
 
 const CONFIRM_TOKEN = 'DELETE';
@@ -68,7 +68,7 @@ export default function SettingsResetScreen() {
 
   function handlePressReset() {
     if (!confirmed || running) return;
-    Alert.alert(
+    showConfirm(
       'Wipe all data?',
       'This deletes every wallet, bill, payment, expense, and transfer. It cannot be undone.',
       [

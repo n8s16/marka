@@ -21,7 +21,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,6 +29,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns, parseISO } from 'date-fns';
@@ -202,17 +202,18 @@ export default function MarkPaidScreen() {
       router.back();
     } catch (err) {
       if (err instanceof BillPaymentPeriodConflictError) {
-        Alert.alert(
+        // Two-way confirm: Overwrite or stay on the form so the user
+        // can pick a different period. window.confirm doesn't natively
+        // express the original 3-button design (Cancel back / pick
+        // different / Overwrite); collapsing to "Overwrite or stay"
+        // keeps the destructive choice explicit and lets the user
+        // either pick a different period in-place or hit Cancel in
+        // the form's header.
+        showConfirm(
           'Already paid',
-          'This bill is already paid for that period. What would you like to do?',
+          'This bill is already paid for that period. Overwrite the existing payment, or pick a different period and try again?',
           [
-            { text: 'Cancel', style: 'cancel', onPress: () => router.back() },
-            {
-              text: 'Pick a different period',
-              onPress: () => {
-                /* leave the form open so the user can edit */
-              },
-            },
+            { text: 'Pick a different period', style: 'cancel' },
             {
               text: 'Overwrite',
               style: 'destructive',

@@ -24,7 +24,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -33,6 +32,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns } from 'date-fns';
@@ -235,7 +235,7 @@ export default function TransferEditScreen() {
   }
 
   function handleDelete() {
-    Alert.alert(
+    showConfirm(
       'Delete transfer?',
       'This permanently removes the transfer record. Per-wallet outflow updates will reflect once you return to the Wallets tab.',
       [

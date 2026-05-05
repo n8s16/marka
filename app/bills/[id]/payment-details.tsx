@@ -16,13 +16,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format as formatDateFns, parseISO } from 'date-fns';
@@ -110,7 +110,7 @@ export default function PaymentDetailsScreen() {
 
   function handleUndo() {
     if (!payment || !bill) return;
-    Alert.alert(
+    showConfirm(
       'Undo this payment?',
       `This removes the ${formatPeriodLabel(period)} payment for ${bill.name} (${formatCurrency(payment.amount)}). The bill will appear unpaid for that period.`,
       [
@@ -124,7 +124,7 @@ export default function PaymentDetailsScreen() {
               await hardDeleteBillPayment(db, payment.id);
               router.back();
             } catch (err) {
-              Alert.alert('Could not undo', (err as Error).message);
+              showAlert('Could not undo', (err as Error).message);
               setDeleting(false);
             }
           },
