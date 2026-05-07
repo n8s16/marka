@@ -1,0 +1,29 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sage rounded square. iOS will mask its own corner radius, so the
+       rx here just keeps the SVG looking good when rendered raw. -->
+  <rect width="1024" height="1024" rx="220" fill="#8FA886"/>
+
+  <!-- Bold M as a single polyline: outer-left bottom → top, V dip,
+       outer-right top → bottom. Stroke caps + joins both rounded so
+       the corners read as friendly rather than sharp. -->
+  <polyline
+    points="282,768 282,316 512,532 742,316 742,768"
+    fill="none"
+    stroke="#FAFAF7"
+    stroke-width="116"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Double strikethrough — two parallel horizontal lines through
+       the upper third of the M, well above the V dip so the legs
+       read as the "text being struck" rather than the V tip
+       interrupting the strikes. Thinner than the M strokes (44 vs
+       116) so they read as marker strokes over the letter, not as
+       competing geometry. Extends slightly past the outer legs for
+       visual emphasis. -->
+  <line x1="208" y1="408" x2="816" y2="408"
+        stroke="#FAFAF7" stroke-width="56" stroke-linecap="round"/>
+  <line x1="208" y1="486" x2="816" y2="486"
+        stroke="#FAFAF7" stroke-width="56" stroke-linecap="round"/>
+</svg>
