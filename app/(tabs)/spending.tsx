@@ -13,7 +13,7 @@
 // Data fetching and derivation live in `state/expenses-current-month.ts` —
 // this file is layout-only.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -34,6 +34,7 @@ import {
 
 import { ExpenseRow } from '@/components/expense-row';
 import { SpendingSummaryCard } from '@/components/spending-summary-card';
+import { TextField } from '@/components/text-field';
 import { useDb } from '@/db/client';
 import type { Expense } from '@/db/queries/expenses';
 import { useExpensesCurrentMonth } from '@/state/expenses-current-month';
@@ -109,9 +110,23 @@ export default function SpendingScreen() {
     monthlyTotal,
   } = useExpensesCurrentMonth(db, today);
 
+  // Free-text search over expense description + note. Screen-local
+  // state so the summary card keeps showing the actual monthly total
+  // instead of a filtered total — matches the Bills tab pattern.
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredExpenses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return expenses;
+    return expenses.filter((e) => {
+      const inDesc = e.description.toLowerCase().includes(q);
+      const inNote = e.note ? e.note.toLowerCase().includes(q) : false;
+      return inDesc || inNote;
+    });
+  }, [expenses, searchQuery]);
+
   const groups = useMemo(
-    () => groupExpensesByDate(expenses, today),
-    [expenses, today],
+    () => groupExpensesByDate(filteredExpenses, today),
+    [filteredExpenses, today],
   );
 
   return (
@@ -156,6 +171,22 @@ export default function SpendingScreen() {
               />
             </View>
 
+            {/* Search field only renders when there's data to filter. */}
+            {expenses.length > 0 ? (
+              <View style={styles.searchWrap}>
+                <TextField
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search expenses"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                  accessibilityLabel="Search expenses by description or note"
+                />
+              </View>
+            ) : null}
+
             {expenses.length === 0 ? (
               <View style={styles.empty}>
                 <Text
@@ -168,6 +199,17 @@ export default function SpendingScreen() {
                   ]}
                 >
                   No expenses yet. Tap + to log your first expense.
+                </Text>
+              </View>
+            ) : filteredExpenses.length === 0 ? (
+              <View style={styles.noMatches}>
+                <Text
+                  style={[
+                    theme.typography.body.md,
+                    { color: theme.colors.textMuted, textAlign: 'center' },
+                  ]}
+                >
+                  No expenses match &ldquo;{searchQuery.trim()}&rdquo;.
                 </Text>
               </View>
             ) : (
@@ -244,6 +286,15 @@ function makeStyles(theme: Theme) {
       justifyContent: 'center',
       paddingHorizontal: theme.spacing.xxl,
       paddingVertical: theme.spacing.xxxl,
+    },
+    searchWrap: {
+      marginHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+    },
+    noMatches: {
+      paddingHorizontal: theme.spacing.xxl,
+      paddingVertical: theme.spacing.xxxl,
+      alignItems: 'center',
     },
     group: {
       marginBottom: theme.spacing.md,
