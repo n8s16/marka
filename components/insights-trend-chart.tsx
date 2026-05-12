@@ -61,7 +61,13 @@ export interface InsightsTrendChartProps {
 const CHART_HEIGHT = 96;
 const TOP_LABEL_HEIGHT = 18;
 const LABEL_GUTTER = 24;
-const TOTAL_HEIGHT = CHART_HEIGHT + TOP_LABEL_HEIGHT + LABEL_GUTTER;
+// Extra space at the bottom of the ScrollView reserved for the
+// horizontal scrollbar at 12M / 24M windows. Without this gutter the
+// browser draws the scrollbar over the month labels at the bottom of
+// the SVG. Applied as contentContainerStyle.paddingBottom AND counted
+// into TOTAL_HEIGHT so the outer card grows by the same amount.
+const SCROLL_GUTTER = 14;
+const TOTAL_HEIGHT = CHART_HEIGHT + TOP_LABEL_HEIGHT + LABEL_GUTTER + SCROLL_GUTTER;
 
 // Bars sit in a horizontally evenly-spaced row. Each bar gets a fixed
 // fraction of its slot so adjacent bars don't kiss.
@@ -208,7 +214,16 @@ export function InsightsTrendChart({
         <ScrollView
           ref={scrollRef}
           horizontal
+          // Show the indicator only when content actually overflows.
+          // On desktop browsers the scrollbar is the only affordance
+          // for horizontal panning (mouse can't drag a ScrollView),
+          // so we MUST keep it visible at 12M / 24M.
           showsHorizontalScrollIndicator={svgWidth > innerWidth}
+          // Give the scrollbar its own gutter below the labels via
+          // contentContainerStyle padding. Without it the browser
+          // draws the bar overlapping the month labels at the bottom
+          // of the SVG.
+          contentContainerStyle={{ paddingBottom: SCROLL_GUTTER }}
           // Disable scroll when content fits — keeps the gesture from
           // intercepting taps unnecessarily for short windows.
           scrollEnabled={svgWidth > innerWidth}
@@ -279,6 +294,13 @@ export function InsightsTrendChart({
                   x={x}
                   y={y}
                   width={barWidth}
+                  // Each stacked segment renders as a softly rounded
+                  // capsule, matching the "this month" pill on the
+                  // Year View. Stacked segments overlap a bit visually
+                  // but the rounding stays subtle (rx=3) so the bar
+                  // still reads as one column from a glance.
+                  rx={3}
+                  ry={3}
                   height={segmentHeight}
                   fill={seg.color}
                   opacity={opacity}
