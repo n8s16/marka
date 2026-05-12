@@ -14,7 +14,7 @@
 // date-grouped sections, FAB at bottom-right routing to /transfers/new.
 // Data fetching lives in `state/transfers-history.ts`.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -33,6 +33,7 @@ import {
   subDays,
 } from 'date-fns';
 
+import { TextField } from '@/components/text-field';
 import { TransferRow } from '@/components/transfer-row';
 import { useDb } from '@/db/client';
 import type { Transfer } from '@/db/queries/transfers';
@@ -88,9 +89,26 @@ export default function TransfersHistoryScreen() {
 
   const { loading, error, transfers, walletsById } = useTransfersHistory(db);
 
+  // Search across the transfer's note + the names of the from / to
+  // wallets. Wallet names are looked up via `walletsById` (already
+  // in scope for rendering rows). Same pattern as Bills/Spending.
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredTransfers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return transfers;
+    return transfers.filter((t) => {
+      if (t.note && t.note.toLowerCase().includes(q)) return true;
+      const fromName = walletsById.get(t.from_wallet_id)?.name?.toLowerCase();
+      if (fromName && fromName.includes(q)) return true;
+      const toName = walletsById.get(t.to_wallet_id)?.name?.toLowerCase();
+      if (toName && toName.includes(q)) return true;
+      return false;
+    });
+  }, [transfers, walletsById, searchQuery]);
+
   const groups = useMemo(
-    () => groupTransfersByDate(transfers, today),
-    [transfers, today],
+    () => groupTransfersByDate(filteredTransfers, today),
+    [filteredTransfers, today],
   );
 
   return (
@@ -135,6 +153,22 @@ export default function TransfersHistoryScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.scrollContent}>
+            {/* Search field only renders when there's data to filter. */}
+            {transfers.length > 0 ? (
+              <View style={styles.searchWrap}>
+                <TextField
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search transfers"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                  accessibilityLabel="Search transfers by note or wallet name"
+                />
+              </View>
+            ) : null}
+
             {transfers.length === 0 ? (
               <View style={styles.empty}>
                 <Text
@@ -147,6 +181,17 @@ export default function TransfersHistoryScreen() {
                   ]}
                 >
                   No transfers yet. Tap + to record one.
+                </Text>
+              </View>
+            ) : filteredTransfers.length === 0 ? (
+              <View style={styles.noMatches}>
+                <Text
+                  style={[
+                    theme.typography.body.md,
+                    { color: theme.colors.textMuted, textAlign: 'center' },
+                  ]}
+                >
+                  No transfers match &ldquo;{searchQuery.trim()}&rdquo;.
                 </Text>
               </View>
             ) : (
@@ -220,6 +265,15 @@ function makeStyles(theme: Theme) {
       justifyContent: 'center',
       paddingHorizontal: theme.spacing.xxl,
       paddingVertical: theme.spacing.xxxl,
+    },
+    searchWrap: {
+      marginHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+    },
+    noMatches: {
+      paddingHorizontal: theme.spacing.xxl,
+      paddingVertical: theme.spacing.xxxl,
+      alignItems: 'center',
     },
     group: {
       marginBottom: theme.spacing.md,
