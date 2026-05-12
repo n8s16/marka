@@ -10,7 +10,7 @@
 // Data fetching and derivation live in `state/bills-current-month.ts` —
 // this file is layout-only.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -28,6 +28,7 @@ import { BillRow } from '@/components/bill-row';
 import { BillsEmptyState } from '@/components/bills-empty-state';
 import { BillsReminderCallout } from '@/components/bills-reminder-callout';
 import { BillsSummaryCard } from '@/components/bills-summary-card';
+import { TextField } from '@/components/text-field';
 import { useDb } from '@/db/client';
 import { useBillsCurrentMonth } from '@/state/bills-current-month';
 import { useTheme } from '@/state/theme';
@@ -52,6 +53,18 @@ export default function BillsScreen() {
     expectedTotal,
     reminderEntry,
   } = useBillsCurrentMonth(db, today);
+
+  // Free-text search over bill names. Stays in screen state — not in
+  // the data hook — so the summary card and reminder callout keep
+  // reflecting the actual month total, not a filtered total. Most
+  // users will want "₱X paid of ₱Y this month" visible while they
+  // hunt for a specific bill.
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredEntries = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter((e) => e.bill.name.toLowerCase().includes(q));
+  }, [entries, searchQuery]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
@@ -116,11 +129,41 @@ export default function BillsScreen() {
               />
             ) : null}
 
+            {/* Search field — only rendered once there are bills to
+                filter. On a fresh install the empty state is its own
+                affordance ("Tap + to add your first bill"); a search
+                input there would be noise. */}
+            {entries.length > 0 ? (
+              <View style={styles.searchWrap}>
+                <TextField
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search bills"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                  accessibilityLabel="Search bills by name"
+                />
+              </View>
+            ) : null}
+
             {entries.length === 0 ? (
               <BillsEmptyState />
+            ) : filteredEntries.length === 0 ? (
+              <View style={styles.noMatches}>
+                <Text
+                  style={[
+                    theme.typography.body.md,
+                    { color: theme.colors.textMuted, textAlign: 'center' },
+                  ]}
+                >
+                  No bills match &ldquo;{searchQuery.trim()}&rdquo;.
+                </Text>
+              </View>
             ) : (
               <View style={styles.list}>
-                {entries.map((e) => (
+                {filteredEntries.map((e) => (
                   <BillRow
                     key={e.bill.id}
                     bill={e.bill}
@@ -187,6 +230,15 @@ function makeStyles(theme: Theme) {
       borderColor: theme.colors.border,
       borderWidth: theme.borderWidth.hairline,
       overflow: 'hidden',
+    },
+    searchWrap: {
+      marginHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+    },
+    noMatches: {
+      paddingHorizontal: theme.spacing.xxl,
+      paddingVertical: theme.spacing.xxxl,
+      alignItems: 'center',
     },
     fab: {
       position: 'absolute',
