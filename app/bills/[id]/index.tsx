@@ -583,7 +583,11 @@ export default function BillEditScreen() {
 
           <View style={styles.field}>
             <CurrencyInput
-              label="Expected amount"
+              label={
+                form.endsMode === 'after_n'
+                  ? 'Amount per payment'
+                  : 'Expected amount'
+              }
               value={form.expectedAmount}
               onChange={(v) => set('expectedAmount', v)}
               error={errors.expectedAmount ?? null}
