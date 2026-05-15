@@ -62,6 +62,11 @@ export const bill = sqliteTable(
     due_day: integer('due_day').notNull(),
     // YYYY-MM. Anchors the bill's first due-month.
     start_period: text('start_period').notNull(),
+    // YYYY-MM. Optional inclusive last due-month. Null means the bill recurs
+    // indefinitely. Periods strictly after end_period are NOT due-periods
+    // regardless of cadence. Validation (end_period >= start_period) lives
+    // in /logic, not at the DB layer.
+    end_period: text('end_period'),
     default_wallet_id: text('default_wallet_id')
       .notNull()
       .references(() => wallet.id, { onDelete: 'restrict' }),

@@ -16,6 +16,7 @@ function makeCadence(overrides: Partial<BillCadence> = {}): BillCadence {
     frequency: 'monthly',
     interval_months: null,
     start_period: '2026-01',
+    end_period: null,
     ...overrides,
   };
 }
@@ -25,6 +26,7 @@ function makeBill(overrides: Partial<BillDueDay> = {}): BillDueDay {
     frequency: 'monthly',
     interval_months: null,
     start_period: '2026-01',
+    end_period: null,
     due_day: 15,
     ...overrides,
   };
@@ -160,6 +162,60 @@ describe('isPeriodDueForBill', () => {
       expect(isPeriodDueForBill(bill, '2026-04')).toBe(false);
     });
   });
+
+  describe('end_period', () => {
+    it('null end_period leaves the sequence unbounded (default)', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-01',
+        end_period: null,
+      });
+      expect(isPeriodDueForBill(bill, '2030-12')).toBe(true);
+    });
+
+    it('returns true for periods at end_period (inclusive)', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      expect(isPeriodDueForBill(bill, '2026-10')).toBe(true);
+    });
+
+    it('returns true for periods before end_period', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      expect(isPeriodDueForBill(bill, '2026-05')).toBe(true);
+      expect(isPeriodDueForBill(bill, '2026-09')).toBe(true);
+    });
+
+    it('returns false for periods strictly after end_period', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      expect(isPeriodDueForBill(bill, '2026-11')).toBe(false);
+      expect(isPeriodDueForBill(bill, '2027-05')).toBe(false);
+    });
+
+    it('forward-caps a quarterly bill mid-cadence', () => {
+      // Quarterly anchored on 2026-03: due 2026-03, 2026-06, 2026-09, 2026-12.
+      // end_period 2026-08 means the last actual due-period is 2026-06.
+      const bill = makeCadence({
+        frequency: 'quarterly',
+        start_period: '2026-03',
+        end_period: '2026-08',
+      });
+      expect(isPeriodDueForBill(bill, '2026-03')).toBe(true);
+      expect(isPeriodDueForBill(bill, '2026-06')).toBe(true);
+      // 2026-09 would normally be due but is past end_period.
+      expect(isPeriodDueForBill(bill, '2026-09')).toBe(false);
+    });
+  });
 });
 
 // ─── getDueDateForPeriod ─────────────────────────────────────────────────────
@@ -273,6 +329,41 @@ describe('getNextDuePeriod', () => {
     });
     expect(getNextDuePeriod(bill, '2026-04')).toBeNull();
   });
+
+  describe('end_period', () => {
+    it('returns next period when it falls on/before end_period', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      expect(getNextDuePeriod(bill, '2026-08')).toBe('2026-09');
+      expect(getNextDuePeriod(bill, '2026-09')).toBe('2026-10');
+    });
+
+    it('returns null when the next candidate would exceed end_period', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      // 2026-10 is the last due-period; the next month is past end_period.
+      expect(getNextDuePeriod(bill, '2026-10')).toBeNull();
+      // Asking from a period already past end_period also yields null.
+      expect(getNextDuePeriod(bill, '2027-01')).toBeNull();
+    });
+
+    it('returns null for quarterly bill capped before the next quarter', () => {
+      // Quarterly: due 2026-03, 2026-06, 2026-09, 2026-12. end_period 2026-08
+      // ⇒ last due-period is 2026-06; no next.
+      const bill = makeCadence({
+        frequency: 'quarterly',
+        start_period: '2026-03',
+        end_period: '2026-08',
+      });
+      expect(getNextDuePeriod(bill, '2026-06')).toBeNull();
+    });
+  });
 });
 
 // ─── getPrevDuePeriod ────────────────────────────────────────────────────────
@@ -304,6 +395,41 @@ describe('getPrevDuePeriod', () => {
   it('returns the previous year for yearly bills', () => {
     const bill = makeCadence({ frequency: 'yearly', start_period: '2026-03' });
     expect(getPrevDuePeriod(bill, '2027-03')).toBe('2026-03');
+  });
+
+  describe('end_period', () => {
+    it('returns the prior in-range due-period when fromPeriod is past end_period', () => {
+      // Monthly, 2026-05..2026-10. Last actual due-period is 2026-10. Asking
+      // from a period past end_period should walk back to 2026-10.
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      expect(getPrevDuePeriod(bill, '2027-02')).toBe('2026-10');
+      expect(getPrevDuePeriod(bill, '2026-11')).toBe('2026-10');
+    });
+
+    it('returns the last on-cadence period before end_period for quarterly bills', () => {
+      // Quarterly anchored 2026-03 → due 2026-03, 2026-06, 2026-09. end_period
+      // 2026-08 means the last actual due-period is 2026-06. Walking back
+      // from 2027-01 should land there, not on the cadence-only 2026-09.
+      const bill = makeCadence({
+        frequency: 'quarterly',
+        start_period: '2026-03',
+        end_period: '2026-08',
+      });
+      expect(getPrevDuePeriod(bill, '2027-01')).toBe('2026-06');
+    });
+
+    it('returns null when end_period is before start_period (no due-periods exist)', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-03', // invalid range — caught by form layer, but be defensive
+      });
+      expect(getPrevDuePeriod(bill, '2026-10')).toBeNull();
+    });
   });
 });
 
@@ -361,6 +487,48 @@ describe('listDuePeriodsInRange', () => {
   it('handles a single-month range that is not a due-period', () => {
     const bill = makeCadence({ frequency: 'quarterly', start_period: '2026-03' });
     expect(listDuePeriodsInRange(bill, '2026-04', '2026-04')).toEqual([]);
+  });
+
+  describe('end_period', () => {
+    it('truncates monthly cadence at end_period (inclusive)', () => {
+      // 6-month installment: 2026-05..2026-10. Query window extends past it.
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      expect(listDuePeriodsInRange(bill, '2026-01', '2026-12')).toEqual([
+        '2026-05',
+        '2026-06',
+        '2026-07',
+        '2026-08',
+        '2026-09',
+        '2026-10',
+      ]);
+    });
+
+    it('returns [] when the range starts past end_period', () => {
+      const bill = makeCadence({
+        frequency: 'monthly',
+        start_period: '2026-05',
+        end_period: '2026-10',
+      });
+      expect(listDuePeriodsInRange(bill, '2026-11', '2027-06')).toEqual([]);
+    });
+
+    it('truncates quarterly cadence at end_period', () => {
+      // Quarterly anchored 2026-03; end_period 2026-08 keeps only 2026-03,
+      // 2026-06. The 2026-09 candidate is past the cap.
+      const bill = makeCadence({
+        frequency: 'quarterly',
+        start_period: '2026-03',
+        end_period: '2026-08',
+      });
+      expect(listDuePeriodsInRange(bill, '2026-01', '2026-12')).toEqual([
+        '2026-03',
+        '2026-06',
+      ]);
+    });
   });
 });
 
@@ -434,5 +602,37 @@ describe('getSmartDefaultPeriodForPayment', () => {
     });
     const today = new Date(2026, 4, 1);
     expect(getSmartDefaultPeriodForPayment(bill, today, [])).toBe('2026-04');
+  });
+
+  describe('end_period', () => {
+    it('skips candidates past end_period', () => {
+      // Monthly, ends 2026-06. Today is 2026-07 (past end_period), and all
+      // actual due-periods (2026-04..2026-06) within the lookback window
+      // are paid. With no remaining unpaid candidate the function falls
+      // back to start_period per the documented defensive contract.
+      const bill = makeBill({
+        frequency: 'monthly',
+        start_period: '2026-04',
+        end_period: '2026-06',
+        due_day: 15,
+      });
+      const today = new Date(2026, 6, 5); // 2026-07-05
+      const paid = ['2026-04', '2026-05', '2026-06'];
+      expect(getSmartDefaultPeriodForPayment(bill, today, paid)).toBe('2026-04');
+    });
+
+    it('with end_period set and an unpaid period remaining → picks the unpaid one', () => {
+      // Same finite bill, but 2026-06 (the last due-period) is still unpaid.
+      // The smart default should land there rather than the fallback.
+      const bill = makeBill({
+        frequency: 'monthly',
+        start_period: '2026-04',
+        end_period: '2026-06',
+        due_day: 15,
+      });
+      const today = new Date(2026, 6, 5); // 2026-07-05
+      const paid = ['2026-04', '2026-05'];
+      expect(getSmartDefaultPeriodForPayment(bill, today, paid)).toBe('2026-06');
+    });
   });
 });

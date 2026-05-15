@@ -9,6 +9,7 @@ function makeBill(overrides: Partial<BillForStatus> = {}): BillForStatus {
     frequency: 'monthly',
     interval_months: null,
     start_period: '2026-01',
+    end_period: null,
     due_day: 15,
     reminder_offset_days: 3,
     ...overrides,

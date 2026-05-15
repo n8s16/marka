@@ -66,10 +66,18 @@ function todayPeriodString(today: Date): string {
  * Resolve the "current period" for a bill: the period containing today's
  * calendar month if it's a due-period, else the most recent prior due-period.
  * Returns null when the bill has no due-period at or before today's month
- * (e.g. quarterly bill with start_period in the future).
+ * (e.g. quarterly bill with start_period in the future) OR when today's period
+ * is past the bill's end_period — finite-duration bills drop off the Bills tab
+ * once their end-month is in the past (PRD §"Finite-duration bills").
  */
 function currentPeriodForBill(bill: Bill, today: Date): string | null {
   const tp = todayPeriodString(today);
+
+  // Past end_period: bill is over for current-month purposes. Missed payments
+  // are still visible in the year grid; the Bills tab is the "this month"
+  // surface and an ended bill has no current-month action.
+  if (bill.end_period && tp > bill.end_period) return null;
+
   if (isPeriodDueForBill(bill, tp)) return tp;
 
   const prev = getPrevDuePeriod(bill, tp);

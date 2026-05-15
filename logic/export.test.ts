@@ -52,6 +52,7 @@ function makeBill(overrides: Partial<Bill> = {}): Bill {
     interval_months: null,
     due_day: 15,
     start_period: '2026-01',
+    end_period: null,
     default_wallet_id: 'w-1',
     reminder_offset_days: 3,
     reminder_time: '08:00',
@@ -324,8 +325,9 @@ describe('exportToCsv', () => {
     const billLine = dataLine(csvs.get('bill')!, 0);
     expect(billLine).toContain('"b-archived"');
     expect(billLine).toContain('"Old gym"');
-    // archived column is the 12th index (0-based 11).
-    expect(billLine.split(',')[11]).toBe('"true"');
+    // archived column is the 13th index (0-based 12) after end_period landed
+    // between start_period and default_wallet_id.
+    expect(billLine.split(',')[12]).toBe('"true"');
 
     const catLine = dataLine(csvs.get('category')!, 0);
     expect(catLine.split(',')[3]).toBe('"true"');

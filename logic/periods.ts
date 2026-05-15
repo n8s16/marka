@@ -33,11 +33,17 @@ export type Frequency = 'monthly' | 'quarterly' | 'yearly' | 'custom';
 /**
  * The minimum subset of Bill fields required for cadence calculations. Lets
  * callers pass a partial row without dragging in unrelated columns.
+ *
+ * `end_period` is the optional inclusive last due-month (`YYYY-MM`). When
+ * null, the bill recurs indefinitely. When set, any period strictly after
+ * `end_period` is NOT a due-period regardless of cadence — per
+ * docs/DATA_MODEL.md §"Bill" and PRD §"Finite-duration bills".
  */
 export type BillCadence = {
   frequency: Frequency;
   interval_months: number | null;
   start_period: string; // YYYY-MM
+  end_period: string | null; // YYYY-MM inclusive, or null for unbounded
 };
 
 export type BillDueDay = BillCadence & {
@@ -93,8 +99,10 @@ function stepMonths(bill: BillCadence): number | null {
 /**
  * Returns true iff `period` is a due-period for this bill, given its cadence
  * and `start_period` anchor. A period earlier than `start_period` is never due
- * regardless of frequency. Malformed bills (e.g. custom + invalid interval)
- * return false.
+ * regardless of frequency. When `end_period` is set, any period strictly
+ * after `end_period` is never due either (lexical compare on `YYYY-MM` strings
+ * matches chronological order). Malformed bills (e.g. custom + invalid
+ * interval) return false.
  */
 export function isPeriodDueForBill(bill: BillCadence, period: string): boolean {
   const start = periodToDate(bill.start_period);
@@ -106,6 +114,12 @@ export function isPeriodDueForBill(bill: BillCadence, period: string): boolean {
 
   const diff = differenceInCalendarMonths(target, start);
   if (diff < 0) return false;
+  // end_period caps the sequence (inclusive). Lexical compare on YYYY-MM is
+  // chronological. A malformed end_period (wrong shape) is treated as absent
+  // rather than rejecting the bill outright — the form layer validates shape.
+  if (bill.end_period && /^\d{4}-\d{2}$/.test(bill.end_period)) {
+    if (period > bill.end_period) return false;
+  }
   return diff % step === 0;
 }
 
@@ -140,8 +154,10 @@ export function getDueDateForPeriod(
 
 /**
  * Returns the next due-period strictly after `fromPeriod`, or null if
- * indeterminate (malformed bill, malformed input). Bills in v1 have no end
- * date, so the null is purely a safety hatch.
+ * indeterminate (malformed bill, malformed input) or if the next candidate
+ * would exceed `end_period` (finite-duration bills — PRD §"Finite-duration
+ * bills"). For unbounded bills (`end_period` null) this only returns null on
+ * malformed input.
  */
 export function getNextDuePeriod(
   bill: BillCadence,
@@ -154,21 +170,38 @@ export function getNextDuePeriod(
   if (step === null) return null;
 
   const diff = differenceInCalendarMonths(from, start);
+  let candidate: string;
   if (diff < 0) {
     // `fromPeriod` predates the start — the next due-period is `start_period`
     // itself.
-    return dateToPeriod(start);
+    candidate = dateToPeriod(start);
+  } else {
+    // Number of complete steps already passed (floor). Add one to advance to
+    // the next step.
+    const nextStepIndex = Math.floor(diff / step) + 1;
+    candidate = dateToPeriod(addMonths(start, nextStepIndex * step));
   }
-  // Number of complete steps already passed (floor). Add one to advance to the
-  // next step.
-  const nextStepIndex = Math.floor(diff / step) + 1;
-  const next = addMonths(start, nextStepIndex * step);
-  return dateToPeriod(next);
+  // Cap at end_period (inclusive). If the next candidate is past the end,
+  // there is no next due-period.
+  if (
+    bill.end_period &&
+    /^\d{4}-\d{2}$/.test(bill.end_period) &&
+    candidate > bill.end_period
+  ) {
+    return null;
+  }
+  return candidate;
 }
 
 /**
  * Returns the most recent due-period strictly before `fromPeriod`, or null if
  * `fromPeriod` is `start_period` or earlier (no prior due-period exists).
+ *
+ * `end_period` only forward-caps the sequence — when `fromPeriod` is past
+ * `end_period`, the candidate is additionally clamped to the last actual
+ * due-period (the largest on-cadence period that is `<= end_period`). If
+ * `end_period` itself is before `start_period`, there are no due-periods at
+ * all and the function returns null.
  */
 export function getPrevDuePeriod(
   bill: BillCadence,
@@ -192,13 +225,28 @@ export function getPrevDuePeriod(
     prevStepIndex = Math.floor(diff / step);
   }
   if (prevStepIndex < 0) return null;
-  const prev = addMonths(start, prevStepIndex * step);
-  return dateToPeriod(prev);
+  let prevPeriod = dateToPeriod(addMonths(start, prevStepIndex * step));
+
+  // If end_period is set and the candidate exceeds it (happens when
+  // fromPeriod is past end_period), walk back until we find an on-cadence
+  // period that fits within the [start_period, end_period] window.
+  if (bill.end_period && /^\d{4}-\d{2}$/.test(bill.end_period)) {
+    while (prevPeriod > bill.end_period) {
+      prevStepIndex -= 1;
+      if (prevStepIndex < 0) return null;
+      prevPeriod = dateToPeriod(addMonths(start, prevStepIndex * step));
+    }
+  }
+
+  return prevPeriod;
 }
 
 /**
  * Returns all due-periods between `rangeStart` and `rangeEnd` inclusive
  * (`YYYY-MM` strings). Returns [] for malformed bills or inverted ranges.
+ *
+ * `end_period`, when set, additionally truncates the sequence — any candidate
+ * strictly after `end_period` is dropped, even if it falls inside the range.
  */
 export function listDuePeriodsInRange(
   bill: BillCadence,
@@ -214,6 +262,11 @@ export function listDuePeriodsInRange(
   const step = stepMonths(bill);
   if (step === null) return [];
 
+  const endCap =
+    bill.end_period && /^\d{4}-\d{2}$/.test(bill.end_period)
+      ? bill.end_period
+      : null;
+
   // Walk forward from the first due-period >= rangeStart.
   // Compute the smallest k such that start + k*step >= rangeStart.
   const diffStartToRangeStart = differenceInCalendarMonths(rs, start);
@@ -225,8 +278,12 @@ export function listDuePeriodsInRange(
   for (let i = 0; i < MAX_ITERS; i++) {
     const candidate = addMonths(start, k * step);
     if (differenceInCalendarMonths(candidate, re) > 0) break;
+    const candidateStr = dateToPeriod(candidate);
+    // end_period cap: stop iterating once we're past it. (No on-cadence
+    // candidate further out can satisfy the bill anyway.)
+    if (endCap && candidateStr > endCap) break;
     if (differenceInCalendarMonths(candidate, rs) >= 0) {
-      out.push(dateToPeriod(candidate));
+      out.push(candidateStr);
     }
     k++;
   }

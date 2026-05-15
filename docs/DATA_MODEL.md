@@ -48,6 +48,7 @@ Represents a recurring obligation — utilities, internet, subscriptions, MP2 co
 | `interval_months` | integer | nullable; required when `frequency = custom` (e.g. `2` for bi-monthly). Null for monthly/quarterly/yearly. |
 | `due_day` | integer | 1–31. Clamps to the last day of the month when the month has fewer days (a bill with `due_day = 31` resolves to Feb 28/29, Apr 30, etc.). |
 | `start_period` | text | `YYYY-MM`. The first due-month for this bill. Anchors quarterly/yearly/custom cadences; defaults to the bill's creation month for monthly. |
+| `end_period` | text | nullable. `YYYY-MM`. The last due-month for this bill (inclusive). When null, the bill recurs indefinitely. Periods strictly after `end_period` are NOT due-periods regardless of cadence. |
 | `default_wallet_id` | uuid | foreign key to Wallet |
 | `reminder_offset_days` | integer | e.g. `3` for "3 days before due" |
 | `reminder_time` | text | time-of-day, e.g. `"08:00"` |
@@ -58,7 +59,9 @@ Represents a recurring obligation — utilities, internet, subscriptions, MP2 co
 
 `start_period` anchors the bill's due-month sequence. For `monthly`, every month from `start_period` onward is a due-month. For `quarterly`, due-months are every 3 months from `start_period` (e.g. `2026-03` → Mar/Jun/Sep/Dec each year). For `yearly`, the same month each year from `start_period`. For `custom`, every `interval_months` months from `start_period`.
 
-Within a due-month, the actual due-date is that period's year and month combined with `due_day`, clamped to the last day of the month when the month has fewer days. A period earlier than `start_period` is never a due-period for the bill, even if frequency would otherwise suggest it; the year grid renders em-dash for non-due periods.
+`end_period`, when set, caps that sequence. A period strictly after `end_period` is never a due-period for the bill, even if frequency would otherwise suggest it. `end_period` is inclusive — the bill's last payment is for `end_period` itself. Setting `end_period < start_period` is invalid (caught at the form/validation layer, not the DB). Use `end_period` to model finite obligations like installment purchases, fixed-term subscriptions, or a planned cancellation. Each periodic payment remains the full obligation for that month — partial payments are still out of scope (PRD §"What's deliberately not in v1").
+
+Within a due-month, the actual due-date is that period's year and month combined with `due_day`, clamped to the last day of the month when the month has fewer days. A period earlier than `start_period` or later than `end_period` is never a due-period for the bill, even if frequency would otherwise suggest it; the year grid renders em-dash for non-due periods.
 
 ### Category
 
@@ -166,7 +169,7 @@ When `show_balance` is false, balance is null/undefined and the UI hides the fie
 
 ### Bill status for a given period
 
-This rule assumes the period is a due-period for the bill (per the cadence rules above). For non-due periods, status is undefined and the year grid renders em-dash directly.
+This rule assumes the period is a due-period for the bill (cadence matches, period is in `[start_period, end_period]` — where `end_period` is unbounded if null). For non-due periods, status is undefined and the year grid renders em-dash directly.
 
 ```
 let payment = BillPayment where bill_id = X and period = P
@@ -196,13 +199,13 @@ For each (bill, period) coordinate in the grid:
 let payment = BillPayment where bill_id = bill.id and period = period
 if payment exists:
   → render payment.amount, strikethrough, tinted with payment.wallet's color
-elif this period is a due-period for the bill (per the cadence rules — frequency, start_period, and interval_months):
+elif this period is a due-period for the bill (per the cadence rules — frequency, start_period, end_period, and interval_months):
   → render forecast value (per rule above), dashed border, no color tint
 else:
   → render em-dash
 ```
 
-Quarterly bills like PRU only have due-periods every 3 months from `start_period`; non-due months render as em-dash.
+Quarterly bills like PRU only have due-periods every 3 months from `start_period`; non-due months render as em-dash. Bills with an `end_period` set render em-dash for every period strictly after it, so a 6-month installment that started in 2026-05 shows due cells through 2026-10 and em-dash from 2026-11 onward.
 
 ## Behavioral rules
 

@@ -38,6 +38,7 @@ The following decisions are locked. Do not relitigate without explicit user appr
 ### What's in v1
 
 - **Bills** with monthly, quarterly, yearly, or custom frequency
+- **Optional end-month on bills**, for finite obligations like installment purchases (e.g. a camera split into 6 monthly charges) or a subscription with a planned cancellation. Once the end-month is past, the bill stops appearing in the current-month list and stops scheduling reminders. Each periodic payment is still the full obligation for that month — this is finite-*duration*, not partial-*payment*.
 - **Subscriptions are bills** (Spotify, Netflix, iCloud sit alongside utilities in the Bills tab)
 - **One-off expenses** with category, wallet, date, optional note
 - **Wallets** with brand color, type (e-wallet, bank, cash), and opt-in balance tracking
@@ -56,7 +57,7 @@ The following decisions are locked. Do not relitigate without explicit user appr
 
 ### What's deliberately not in v1
 
-- Partial bill payments and installments
+- Partial bill payments (e.g. paying half of one period's bill in two transactions — finite-duration bills with an end-month *are* supported, see §"What's in v1")
 - Credit card support (statement balances, carry-over, interest)
 - Budgets and spending limits
 - Goals (saving for trips, etc.)
@@ -99,7 +100,7 @@ The MVP wireframes have been agreed on. Detailed wireframes exist as references;
 - **Payment details** (bottom sheet from Bills, only when tapping a *paid* bill) — bill name + period, amount, wallet, paid date, optional note. Single action: "Undo this payment" with a confirmation; on confirm the BillPayment record is hard-deleted and the row reverts to unpaid for that period. To correct a typo, the user undoes and marks paid again with the right values.
 - **Year grid** (full screen, accessed from Bills) — horizontally scrollable rows × months matrix. Cells tinted by wallet color when paid, dashed border for forecasts, em-dash for non-due months.
   > **Planned v2 redesign** (mobile-native vertical month list with per-month expansion + year switcher): see [`docs/year-view-redesign.md`](year-view-redesign.md) and the wireframe at [`docs/wireframes/year-view-v3.png`](wireframes/year-view-v3.png). The v1 grid description above is what currently ships; v2 supersedes it once landed.
-- **Add / edit bill** — name, expected amount, frequency (monthly / quarterly / yearly / custom — custom takes an interval in months), first due date (one combined date picker — the day-of-month becomes the bill's recurring due-day; the year-month anchors quarterly / yearly / custom cadences; pre-filled to today), default payment source, reminder offset (days before) and reminder time (time of day), auto-forecast toggle.
+- **Add / edit bill** — name, expected amount, frequency (monthly / quarterly / yearly / custom — custom takes an interval in months), first due date (one combined date picker — the day-of-month becomes the bill's recurring due-day; the year-month anchors quarterly / yearly / custom cadences; pre-filled to today), default payment source, reminder offset (days before) and reminder time (time of day), auto-forecast toggle, **ends** picker (default "Never"; "After N periods" derives the end-month from the first due date and the cadence step, and surfaces the resolved end-month + total amount inline).
 - **Add / edit expense** — description, amount (optional), category, wallet, date, optional note.
 - **Add / edit transfer** — from wallet, to wallet, amount, date, optional note.
 - **Transfers history** (full screen, accessed from a "View transfers" link on the Wallets tab) — chronological list of all transfers across all time, grouped by date, tap a row to edit. Mirrors the Spending tab's layout pattern. Transfers don't appear on the Spending tab (they aren't spending) and don't roll into Wallets-tab outflow numbers (per `DATA_MODEL.md` §"Critical rule"), so this is the only place transfers are visible after recording.
@@ -126,6 +127,7 @@ These are the answers to questions that came up during design. They go here so f
 - **Backups**: data file lives in iCloud (iOS) / Google Drive (Android) backup-eligible location. No code beyond placing the file correctly. Manual export from Settings produces a JSON file (full fidelity) or per-table CSVs (for spreadsheets). Both export options include archived records.
 - **Theme**: defaults to System. The user can override in Settings → Preferences → Theme. Mid-session theme changes (system day-night switch) are reflected immediately when System is selected.
 - **App lock**: biometric-only in v1 (Face ID, Touch ID, fingerprint — see DECISIONS §27 for why PIN fallback is deferred). Off by default. When enabling, the user is prompted to authenticate immediately to verify biometrics work before the toggle commits. Once enabled, every cold start and every return-from-background prompts for authentication. No auto-lock-after-idle in v1.
+- **Finite-duration bills**: Bills can optionally carry an `end_period` (YYYY-MM, inclusive — the last due-month). Periods strictly after `end_period` are not due-periods for the bill: they don't show in the current-month list, don't schedule reminders, don't appear in forecasts, and render as em-dash in the year grid (same treatment as periods before `start_period` and cadence-skipped months). The add/edit form offers a "for N periods" helper that computes the end-month from the first due date and the cadence step. Each scheduled payment is still the full obligation for its period — this models *finite duration*, not *partial payment*. Use cases: installment purchases (camera, gadget), fixed-term subscriptions, planned cancellations.
 
 ## Open product questions
 

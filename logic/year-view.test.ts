@@ -17,6 +17,7 @@ function makeBill(overrides: Partial<Bill> = {}): Bill {
     interval_months: null,
     due_day: 15,
     start_period: '2026-01',
+    end_period: null,
     default_wallet_id: 'w1',
     reminder_offset_days: 3,
     reminder_time: '08:00',

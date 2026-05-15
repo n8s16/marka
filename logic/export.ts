@@ -79,6 +79,7 @@ const BILL_COLUMNS = [
   'interval_months',
   'due_day',
   'start_period',
+  'end_period',
   'default_wallet_id',
   'reminder_offset_days',
   'reminder_time',

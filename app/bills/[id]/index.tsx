@@ -30,7 +30,13 @@ import {
 import { showConfirm } from '@/utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { format as formatDateFns } from 'date-fns';
+import {
+  format as formatDateFns,
+  addMonths,
+  differenceInCalendarMonths,
+  parse as parseDateFns,
+  isValid as isValidDateFns,
+} from 'date-fns';
 
 import { CurrencyInput } from '@/components/currency-input';
 import { DateInput, TimeInput } from '@/components/date-input';
@@ -47,17 +53,24 @@ import {
   type BillInsert,
 } from '@/db/queries/bills';
 import { listWallets, type Wallet } from '@/db/queries/wallets';
+import { formatCurrency } from '@/logic/currency';
 import { setOnboardingCompleted } from '@/state/onboarding';
 import { useTheme } from '@/state/theme';
 import type { Theme } from '@/styles/theme';
 
 type FrequencyOption = 'monthly' | 'quarterly' | 'yearly' | 'custom';
+type EndsMode = 'never' | 'after_n';
 
 const FREQUENCY_OPTIONS: ReadonlyArray<{ value: FrequencyOption; label: string }> = [
   { value: 'monthly', label: 'Monthly' },
   { value: 'quarterly', label: 'Quarterly' },
   { value: 'yearly', label: 'Yearly' },
   { value: 'custom', label: 'Custom' },
+];
+
+const ENDS_OPTIONS: ReadonlyArray<{ value: EndsMode; label: string }> = [
+  { value: 'never', label: 'Never' },
+  { value: 'after_n', label: 'After N periods' },
 ];
 
 interface FormState {
@@ -71,6 +84,8 @@ interface FormState {
   reminderOffsetDays: string;
   reminderTime: string;
   autoForecast: boolean;
+  endsMode: EndsMode;
+  endsN: string; // numeric string for typing; '' when unset
 }
 
 interface FieldErrors {
@@ -82,6 +97,7 @@ interface FieldErrors {
   defaultWalletId?: string;
   reminderOffsetDays?: string;
   reminderTime?: string;
+  endsN?: string;
 }
 
 function todayPeriodString(today: Date): string {
@@ -123,6 +139,75 @@ function decomposeFirstDueDate(picked: string): {
   };
 }
 
+// Returns the cadence step in months for the form's current frequency.
+// Mirrors stepMonths() in /logic/periods.ts. Returns null when frequency is
+// custom and intervalMonths is invalid — the form already surfaces that error
+// on the interval field itself.
+function cadenceStepMonths(
+  frequency: FrequencyOption,
+  intervalMonths: string,
+): number | null {
+  switch (frequency) {
+    case 'monthly':
+      return 1;
+    case 'quarterly':
+      return 3;
+    case 'yearly':
+      return 12;
+    case 'custom': {
+      const n = Number(intervalMonths);
+      if (!Number.isInteger(n) || n <= 0) return null;
+      return n;
+    }
+    default:
+      return null;
+  }
+}
+
+// Parse a YYYY-MM period string into a Date pinned to the 1st of that month.
+// Returns null on malformed input. Local to the form file; mirrors the pattern
+// in /logic/periods.ts (periodToDate).
+function periodStringToDate(period: string): Date | null {
+  if (!/^\d{4}-\d{2}$/.test(period)) return null;
+  const d = parseDateFns(period, 'yyyy-MM', new Date(0));
+  return isValidDateFns(d) ? d : null;
+}
+
+// Compute end_period (YYYY-MM) from start_period + N periods at the given
+// cadence step. N=1 means a single-payment bill (end_period === start_period).
+// Returns null on malformed input.
+function computeEndPeriod(
+  startPeriod: string,
+  step: number,
+  n: number,
+): string | null {
+  if (!Number.isInteger(n) || n < 1) return null;
+  if (!Number.isInteger(step) || step <= 0) return null;
+  const start = periodStringToDate(startPeriod);
+  if (!start) return null;
+  const end = addMonths(start, (n - 1) * step);
+  return formatDateFns(end, 'yyyy-MM');
+}
+
+// Inverse of computeEndPeriod. Returns N (>= 1) such that
+//   start_period + (N - 1) * step === end_period.
+// Returns null when end_period is before start_period, when months between
+// don't divide evenly into the cadence step, or when inputs are malformed.
+function countPeriodsBetween(
+  startPeriod: string,
+  endPeriod: string,
+  step: number,
+): number | null {
+  if (!Number.isInteger(step) || step <= 0) return null;
+  const start = periodStringToDate(startPeriod);
+  const end = periodStringToDate(endPeriod);
+  if (!start || !end) return null;
+  const diff = differenceInCalendarMonths(end, start);
+  if (diff < 0) return null;
+  if (diff % step !== 0) return null;
+  return diff / step + 1;
+}
+
 function emptyForm(today: Date): FormState {
   return {
     name: '',
@@ -135,22 +220,46 @@ function emptyForm(today: Date): FormState {
     reminderOffsetDays: '3',
     reminderTime: '08:00',
     autoForecast: false,
+    endsMode: 'never',
+    endsN: '',
   };
 }
 
 function billToForm(bill: Bill): FormState {
+  const frequency = bill.frequency as FrequencyOption;
+  const intervalMonths =
+    typeof bill.interval_months === 'number' ? String(bill.interval_months) : '';
+
+  // Derive endsMode/endsN from end_period. Malformed cases (custom with
+  // invalid interval, end_period < start_period, or off-cadence end_period)
+  // fall back to 'never' so the user can re-pick rather than seeing a
+  // confusing pre-filled state.
+  let endsMode: EndsMode = 'never';
+  let endsN = '';
+  if (bill.end_period) {
+    const step = cadenceStepMonths(frequency, intervalMonths);
+    if (step !== null) {
+      const n = countPeriodsBetween(bill.start_period, bill.end_period, step);
+      if (n !== null && n >= 1) {
+        endsMode = 'after_n';
+        endsN = String(n);
+      }
+    }
+  }
+
   return {
     name: bill.name,
     expectedAmount: bill.expected_amount,
-    frequency: bill.frequency as FrequencyOption,
-    intervalMonths:
-      typeof bill.interval_months === 'number' ? String(bill.interval_months) : '',
+    frequency,
+    intervalMonths,
     dueDay: String(bill.due_day),
     startPeriod: bill.start_period,
     defaultWalletId: bill.default_wallet_id,
     reminderOffsetDays: String(bill.reminder_offset_days),
     reminderTime: bill.reminder_time,
     autoForecast: bill.auto_forecast,
+    endsMode,
+    endsN,
   };
 }
 
@@ -199,6 +308,24 @@ function validate(form: FormState): {
     errors.reminderTime = 'Use 24-hour HH:MM (e.g. 08:00).';
   }
 
+  // Resolve end_period from the "Ends" picker. When mode = 'never', the
+  // payload carries null (unbounded). When mode = 'after_n', N must be a
+  // positive integer; the end-month is computed from start + (N - 1) * step.
+  // If the user has frequency = custom with an invalid interval, the interval
+  // error is already shown — skip the redundant endsN error.
+  let endPeriod: string | null = null;
+  if (form.endsMode === 'after_n') {
+    const n = Number(form.endsN);
+    if (!Number.isInteger(n) || n < 1) {
+      errors.endsN = 'Enter a count of 1 or more.';
+    } else {
+      const step = cadenceStepMonths(form.frequency, form.intervalMonths);
+      if (step !== null && /^\d{4}-\d{2}$/.test(form.startPeriod)) {
+        endPeriod = computeEndPeriod(form.startPeriod, step, n);
+      }
+    }
+  }
+
   if (Object.keys(errors).length > 0) {
     return { errors, payload: null };
   }
@@ -211,6 +338,7 @@ function validate(form: FormState): {
     interval_months: intervalMonths,
     due_day: dueDay,
     start_period: form.startPeriod,
+    end_period: endPeriod,
     default_wallet_id: form.defaultWalletId as string,
     reminder_offset_days: offset,
     reminder_time: form.reminderTime,
@@ -520,6 +648,78 @@ export default function BillEditScreen() {
               an end-of-month bill (e.g. always the 31st, clamped in shorter
               months), pick a 31-day month for the first due date.
             </Text>
+          </View>
+
+          <View style={styles.field}>
+            <SegmentedChips
+              label="Ends"
+              options={ENDS_OPTIONS}
+              value={form.endsMode}
+              onChange={(v) => set('endsMode', v)}
+            />
+            {form.endsMode === 'after_n' ? (
+              <View style={{ marginTop: theme.spacing.md }}>
+                <TextField
+                  label="Number of periods"
+                  value={form.endsN}
+                  onChangeText={(v) => set('endsN', v.replace(/[^0-9]/g, ''))}
+                  placeholder="e.g. 6"
+                  keyboardType="number-pad"
+                  error={errors.endsN ?? null}
+                />
+                {(() => {
+                  // Inline helper lines: resolved last-payment month and
+                  // total amount across the N periods. Both are derived from
+                  // current form state — when the user toggles frequency or
+                  // edits N, these recompute automatically. We hide both
+                  // lines on malformed N (the error message takes the slot)
+                  // or when the step is indeterminate.
+                  const n = Number(form.endsN);
+                  if (!Number.isInteger(n) || n < 1) return null;
+                  const step = cadenceStepMonths(
+                    form.frequency,
+                    form.intervalMonths,
+                  );
+                  if (step === null) return null;
+                  const endPeriod = computeEndPeriod(form.startPeriod, step, n);
+                  if (!endPeriod) return null;
+                  const endDate = periodStringToDate(endPeriod);
+                  if (!endDate) return null;
+                  const lastPaymentLabel = `Last payment: ${formatDateFns(endDate, 'MMM yyyy')}`;
+                  const showTotal =
+                    typeof form.expectedAmount === 'number' &&
+                    form.expectedAmount !== null;
+                  const totalLabel = showTotal
+                    ? `Total amount: ${formatCurrency(n * (form.expectedAmount as number))}`
+                    : null;
+                  return (
+                    <View style={{ marginTop: theme.spacing.xs }}>
+                      <Text
+                        style={[
+                          theme.typography.label.sm,
+                          { color: theme.colors.textMuted },
+                        ]}
+                      >
+                        {lastPaymentLabel}
+                      </Text>
+                      {totalLabel ? (
+                        <Text
+                          style={[
+                            theme.typography.label.sm,
+                            {
+                              color: theme.colors.textMuted,
+                              marginTop: 2,
+                            },
+                          ]}
+                        >
+                          {totalLabel}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })()}
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.field}>
